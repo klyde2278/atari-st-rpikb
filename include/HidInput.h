@@ -57,6 +57,8 @@ public:
 
 private:
     bool get_usb_joystick(int addr, uint8_t& axis, uint8_t& button);
+    bool get_xbox_joystick(int joystick_num, uint8_t& axis, uint8_t& button);
+    bool get_ps4_joystick(int joystick_num, uint8_t& axis, uint8_t& button);
     
 private:
     int keyboard_handle = -1;
@@ -91,6 +93,12 @@ unsigned char st_joystick();
  * Return 1 if the mouse is enabled or 0 if they joystick is enabled
  */
 int st_mouse_enabled();
+
+/**
+ * Update joystick state on-demand (called from 6301 emulator)
+ * Provides better timing accuracy for games that poll rapidly
+ */
+void update_joystick_state();
 
 #ifdef __cplusplus
 }

@@ -73,12 +73,17 @@ public:
      * @param joystick_num 0 or 1
      */
     void toggle_joystick_source(uint8_t joystick_num);
+	
+	/**
+	* Toggle between CPU speeds
+	*/
+	void set_cpu_speed(uint32_t khz);
 
     /**
      * Update the display if necessary
      */
     void update();
-
+	
     /**
      * Serial transmission for logging to screen
      */

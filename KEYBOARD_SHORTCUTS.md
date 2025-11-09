@@ -253,7 +253,12 @@ The emulator now fully supports Xbox controllers using the official TinyUSB XInp
 
 ## Version History
 
-### v7.0.0 (Current)
+### v7.1.0 (Current)
+- Numlock LED turns ON when the keyboard is plugged in and acts as a Power On Light
+- CapsLock LED turns On and OFF when the Caps Lock key is pressed
+- The CPU speed in now shown in real time
+
+### v7.0.0
 - **Xbox Controller Support**: Full XInput driver integration
 - **Joystick Toggle Shortcuts**: Ctrl+F9 (Joy 0) and Ctrl+F10 (Joy 1)
 - **Keypad Shortcuts**: Alt+[ (keypad /) and Alt+] (keypad *)

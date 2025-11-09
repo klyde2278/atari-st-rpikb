@@ -82,15 +82,15 @@ mkdir build
 cd build
 
 # Choose one of the cmake command below according to the language you want to display:
-cmake -DLANGUAGE=EN ..  # For English interface
+cmake -DLANGUAGE=EN ..  # For English language
 #or
-cmake -DLANGUAGE=FR ..  # For French interface
+cmake -DLANGUAGE=FR ..  # For French language
 #or
-cmake -DLANGUAGE=DE ..  # For German interface
+cmake -DLANGUAGE=DE ..  # For German language
 #or
-cmake -DLANGUAGE=SP ..  # For Spanish interface
+cmake -DLANGUAGE=SP ..  # For Spanish language
 #or
-cmake -DLANGUAGE=IT ..  # For Italian interface
+cmake -DLANGUAGE=IT ..  # For Italian language
 
 make
 ```

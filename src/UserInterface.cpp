@@ -130,6 +130,11 @@ void UserInterface::update_status() {
     ssd1306_draw_string(&disp, 0, 36, 1, buf);
 }
 
+void UserInterface::set_cpu_speed(uint32_t khz) {
+    set_sys_clock_khz(khz, false);
+    dirty = true;
+}
+
 void UserInterface::update_mouse() {
     char buf[32];
     ssd1306_draw_string(&disp, 0, 45, 1, get_translation("Mouse speed"));

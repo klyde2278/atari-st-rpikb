@@ -58,6 +58,7 @@ static UserInterface* ui_ = nullptr;
 static int kb_count = 0;
 static int mouse_count = 0;
 static int joy_count = 0;
+static uint8_t current_led_state = 0x01; // NumLock state
 
 
 extern "C" {
@@ -102,13 +103,33 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
     #endif
     
     if (tp == HID_KEYBOARD) {
-        // For keyboards, check if already registered (prevent multi-interface conflict)
-        if (device.find(actual_addr) == device.end()) {
-            device[actual_addr] = new uint8_t[sizeof(hid_keyboard_report_t)];
-            hid_app_request_report(actual_addr, device[actual_addr]);
-            ++kb_count;
+    if (device.find(actual_addr) == device.end()) {
+        device[actual_addr] = new uint8_t[sizeof(hid_keyboard_report_t)];
+        hid_app_request_report(actual_addr, device[actual_addr]);
+        ++kb_count;
+	
+		// Wait for keyboard stabilised
+		sleep_ms(100);
+		
+		// For unknown reason, some keyboard turn the wrong LED (generally ScrollLock) on mounting.
+		// Let's turn all the LED OFF
+		uint8_t led_off = 0x00;
+		for (uint8_t idx = 0; idx < 3; idx++) {
+			tuh_hid_set_report(actual_addr, idx, 0, HID_REPORT_TYPE_OUTPUT, &led_off,sizeof(led_off));
+		}
+		
+		// Wait for keyboard
+		sleep_ms(50);
+		
+        // Turn NumLock LED ON
+        uint8_t current_led_state = 0x01; // Bit 0 = NumLock
+        for (uint8_t idx = 0; idx < 3; idx++) {
+            if (tuh_hid_set_report(actual_addr, idx, 0, HID_REPORT_TYPE_OUTPUT, &current_led_state, sizeof(current_led_state))) {
+                break; // LED report envoyé avec succès
+            }
         }
     }
+}
     else if (tp == HID_MOUSE) {
         // For mice, always use actual address (same as keyboard on Logitech Unifying)
         // If keyboard already registered, skip - we'll handle mouse separately
@@ -251,6 +272,7 @@ void HidInput::handle_keyboard() {
                 if (!last_plus_state) {
                     set_sys_clock_khz(270000, false);
                     last_plus_state = true;
+					ui_->set_cpu_speed(270000);
                 }
             } else {
                 last_plus_state = false;
@@ -269,6 +291,7 @@ void HidInput::handle_keyboard() {
                 if (!last_minus_state) {
                     set_sys_clock_khz(150000, false);
                     last_minus_state = true;
+					ui_->set_cpu_speed(150000);
                 }
             } else {
                 last_minus_state = false;
@@ -378,17 +401,17 @@ void HidInput::handle_keyboard() {
                 capslock_on = !capslock_on;
                 capslock_send_pulse = true;  // Send a pulse to the Atari ST
                 last_capslock_state = true;
-                
+				
                 // Update USB keyboard LED to match state
-                // LED report: bit 1 = Caps Lock (0x02)
-                uint8_t led_report = capslock_on ? 0x02 : 0x00;
+                // LED report: bit 0 = NumLock (0x01), bit 1 = Caps Lock (0x02)
+				current_led_state = (capslock_on ? 0x02 : 0x00) | 0x01; // keep NumLock ON
                 
                 // Try multiple interface indices - wireless keyboards (Logitech Unifying, etc)
                 // may use different interface indices than wired keyboards
                 // Try idx 0 first (standard), then 1, 2 for wireless receivers
                 bool led_sent = false;
                 for (uint8_t idx = 0; idx < 3 && !led_sent; idx++) {
-                    if (tuh_hid_set_report(it.first, idx, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof(led_report))) {
+                    if (tuh_hid_set_report(it.first, idx, 0, HID_REPORT_TYPE_OUTPUT, &current_led_state, sizeof(current_led_state))) {
                         led_sent = true;
                     }
                 }
@@ -469,7 +492,14 @@ void HidInput::handle_keyboard() {
                                       (kb->modifier & KEYBOARD_MODIFIER_RIGHTCTRL)) ? 1 : 0;
             key_states[ATARI_ALT] = ((kb->modifier & KEYBOARD_MODIFIER_LEFTALT) ||
                                       (kb->modifier & KEYBOARD_MODIFIER_RIGHTALT)) ? 1 : 0;
-            // Trigger the next report
+            
+			
+			// Emit LED report each cycle to keep NumLock ON
+			for (uint8_t idx = 0; idx < 3; idx++) {
+				tuh_hid_set_report(it.first, idx, 0, HID_REPORT_TYPE_OUTPUT, &current_led_state, sizeof(current_led_state));
+			}
+
+			// Trigger the next report
             hid_app_request_report(it.first, it.second);
         }
     }

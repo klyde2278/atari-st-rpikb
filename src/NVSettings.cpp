@@ -43,8 +43,8 @@ Settings& NVSettings::get_settings() {
 void NVSettings::write() {
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_LOCATION, FLASH_SECTOR_SIZE);
-    flash_range_program(FLASH_LOCATION, &storage.raw[0], FLASH_PAGE_SIZE);
-    restore_interrupts (ints);
+    flash_range_program(FLASH_LOCATION, &storage.raw[0], FLASH_SECTOR_SIZE);
+    restore_interrupts(ints);
 }
 
 void NVSettings::read() {
@@ -54,6 +54,7 @@ void NVSettings::read() {
     if (storage.settings.version != 1) {
         memset(&storage.raw[0], 0, FLASH_SECTOR_SIZE);
         storage.settings.version = 1;
+		storage.settings.language_index = 0; // Default language (EN)
         write();
     }
 }

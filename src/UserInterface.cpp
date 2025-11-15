@@ -25,6 +25,10 @@
 
 #define DEBOUNCE_COUNT 10
 
+static const char* languages[] = { "EN", "FR", "DE", "SP", "IT" };
+static const int NUM_LANGUAGES = sizeof(languages) / sizeof(languages[0]);
+static int lang_idx = 0;
+
 enum BUTTONS {
     BUTTON_LEFT,
     BUTTON_MIDDLE,
@@ -68,7 +72,11 @@ void UserInterface::init() {
         settings.get_settings().mouse_speed = mouse_speed;
     }
 
+	lang_idx = settings.get_settings().language_index;
+
     serial_tm = get_absolute_time();
+	debug_usb_tm = get_absolute_time();
+
 }
 
 void UserInterface::usb_connect_state(int kb, int mouse, int joy) {
@@ -98,7 +106,6 @@ void UserInterface::set_mouse_enabled(uint8_t en) {
     dirty = true;
 }
 
-
 void UserInterface::update_serial() {
     uint8_t y = 0;
     ssd1306_clear(&disp);
@@ -118,13 +125,13 @@ void UserInterface::update_status() {
     uint32_t cpu_freq = clock_get_hz(clk_sys);
     //uint32_t cpu_freq = 123;
     ssd1306_clear(&disp);
-    sprintf(buf, "%s %d", get_translation("USB Keyboard"), num_kb);
+    sprintf(buf, "%s %d", get_translation("USB Keyboard", lang_idx), num_kb);
     ssd1306_draw_string(&disp, 0, 0, 1,  buf);
-    sprintf(buf, "%s %d", get_translation("USB Mouse"), num_mouse);
+    sprintf(buf, "%s %d", get_translation("USB Mouse", lang_idx), num_mouse);
     ssd1306_draw_string(&disp, 0, 9, 1,  buf);
-    sprintf(buf, "%s %d", get_translation("USB Joystick"), num_joy);
+    sprintf(buf, "%s %d", get_translation("USB Joystick", lang_idx), num_joy);
     ssd1306_draw_string(&disp, 0, 18, 1, buf);
-    sprintf(buf, "%s", get_translation(settings.get_settings().mouse_enabled ? "Mouse enabled" : "Joy 0 enabled"));
+    sprintf(buf, "%s", get_translation(settings.get_settings().mouse_enabled ? "Mouse enabled" : "Joy 0 enabled", lang_idx));
     ssd1306_draw_string(&disp, 0, 27, 1, buf);
     sprintf(buf, "CPU: %.2f MHz", static_cast<double>(cpu_freq) / 1000000.0);
     ssd1306_draw_string(&disp, 0, 36, 1, buf);
@@ -137,7 +144,7 @@ void UserInterface::set_cpu_speed(uint32_t khz) {
 
 void UserInterface::update_mouse() {
     char buf[32];
-    ssd1306_draw_string(&disp, 0, 45, 1, get_translation("Mouse speed"));
+    ssd1306_draw_string(&disp, 0, 45, 1, get_translation("Mouse speed", lang_idx));
     sprintf(buf, "[==============]");
     buf[settings.get_settings().mouse_speed - MOUSE_MIN] = '*';
     ssd1306_draw_string(&disp, 0, 54, 1, buf);
@@ -151,14 +158,14 @@ void UserInterface::update_joy(int index) {
 
 void UserInterface::update_splash() {
     ssd1306_clear(&disp);
-    
+
     // ATARI text (centered)
-    ssd1306_draw_string(&disp, 30, 0, 2, (char*)"ATARI");
-    ssd1306_draw_string(&disp, 28, 25, 1, (char*)"USB - Mega");
+    ssd1306_draw_string(&disp, 22, 0, 2, (char*)"EIFFEL");
+    ssd1306_draw_string(&disp, 28, 25, 1, (char*)"Pico - USB");
     ssd1306_draw_string(&disp, 40, 40, 1, (char*)"Adapter");
-    
+
     // Version number at bottom
-    ssd1306_draw_string(&disp, 45, 55, 1, (char*)"v" PROJECT_VERSION_STRING);
+    ssd1306_draw_string(&disp, 42, 55, 1, (char*)"v" PROJECT_VERSION_STRING);
 }
 
 void UserInterface::update_usb_debug() {
@@ -169,18 +176,18 @@ void UserInterface::update_usb_debug() {
     ssd1306_draw_string(&disp, 0, 0, 1, (char*)"USB Debug Info");
     
     // Device counts
-    sprintf(buf, "KB:%d Mouse:%d Joy:%d", num_kb, num_mouse, num_joy);
+    sprintf(buf, "KB:%d Ms:%d Joy:%d", num_kb, num_mouse, num_joy);
     ssd1306_draw_string(&disp, 0, 12, 1, buf);
     
     // Mount and active device tracking
     uint32_t addr_inst = hid_debug_get_last_addr_inst();
-    sprintf(buf, "Mounts:%lu Active:%lu", 
+    sprintf(buf, "Mnts:%lu Active:%lu", 
         hid_debug_get_mount_calls(),
         hid_debug_get_active_devices());
     ssd1306_draw_string(&disp, 0, 24, 1, buf);
     
     // Last device address and instance
-    sprintf(buf, "Last: Addr:%d Inst:%d", 
+    sprintf(buf, "Last:Ad:%d Inst:%d", 
         (addr_inst >> 8) & 0xFF,
         addr_inst & 0xFF);
     ssd1306_draw_string(&disp, 0, 36, 1, buf);
@@ -191,6 +198,13 @@ void UserInterface::update_usb_debug() {
     
     sprintf(buf, "Reports Copy:%lu", hid_debug_get_report_copied());
     ssd1306_draw_string(&disp, 0, 56, 1, buf);
+}
+
+void UserInterface::update_language() {
+    ssd1306_clear(&disp);
+    ssd1306_draw_string(&disp, 0, 0, 1, get_translation("Language", lang_idx));
+    const char* lang = languages[settings.get_settings().language_index];
+    ssd1306_draw_string(&disp, 0, 30, 2, (char*)lang);
 }
 
 void UserInterface::handle_buttons() {
@@ -223,7 +237,7 @@ void UserInterface::on_button_down(int i) {
     // Middle button changes page
     if (i == BUTTON_MIDDLE) {
         int pg = (int)page;
-        pg = ((pg + 1) % (PAGE_USB_DEBUG + 1));
+        pg = ((pg + 1) % (PAGE_USB_DEBUG + 1)); // Mention here what should be the last PAGE of the Enum
         page = (PAGE)pg;
         dirty = true;
     }
@@ -240,6 +254,13 @@ void UserInterface::on_button_down(int i) {
             settings.write();
             dirty = true;
         }
+		else if (page == PAGE_LANGUAGE) {
+			lang_idx = settings.get_settings().language_index;
+			lang_idx = (lang_idx - 1 + NUM_LANGUAGES) % NUM_LANGUAGES;
+			settings.get_settings().language_index = lang_idx;
+			settings.write();
+			dirty = true;
+		}
     }
     else if (i == BUTTON_RIGHT) {
         if (page == PAGE_MOUSE) {
@@ -254,6 +275,13 @@ void UserInterface::on_button_down(int i) {
             settings.write();
             dirty = true;
         }
+		else if (page == PAGE_LANGUAGE) {
+			lang_idx = settings.get_settings().language_index;
+			lang_idx = (lang_idx + 1) % NUM_LANGUAGES;
+			settings.get_settings().language_index = lang_idx;
+			settings.write();
+			dirty = true;
+		}
     }
 }
 
@@ -290,11 +318,19 @@ void UserInterface::update() {
             update_splash();
         }
         else if (page == PAGE_USB_DEBUG) {
-            update_usb_debug();
-            ssd1306_show(&disp);
-            // Keep refreshing debug page
-            dirty = true;
+			absolute_time_t tm = get_absolute_time();
+            if (absolute_time_diff_us(debug_usb_tm, tm) >= (500 * 1000)) {
+                debug_usb_tm = tm;
+                update_usb_debug();
+			}
+			else {
+                // Not time yet
+                dirty = true;
+            }
         }
+		else if (page == PAGE_LANGUAGE) {
+			update_language();
+		}		
         if (!dirty) {
             ssd1306_show(&disp);
         }

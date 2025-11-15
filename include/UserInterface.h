@@ -26,7 +26,7 @@
 #define MOUSE_MIN -7
 #define MOUSE_MAX 8
 
-extern const char* get_translation(const char* key);
+extern const char* get_translation(const char* key, int lang_idx);
 
 class UserInterface {
 public:
@@ -38,7 +38,9 @@ public:
         PAGE_JOY0,
         PAGE_JOY1,
         PAGE_SERIAL,
+		PAGE_LANGUAGE,
         PAGE_USB_DEBUG
+		
     };
 
     void init();
@@ -88,6 +90,11 @@ public:
      * Serial transmission for logging to screen
      */
     void serial(bool send, uint8_t data);
+	
+	/**
+	* Update language
+	*/
+	void update_language();
 
 private:
     void update_serial();
@@ -108,6 +115,7 @@ private:
     int         num_joy = 0;
     std::deque<std::string> serial_lines;
     absolute_time_t serial_tm;
+	absolute_time_t debug_usb_tm;
     uint        btn_gpio[3];
     int         btn_count[3];
 };

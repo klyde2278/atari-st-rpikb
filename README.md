@@ -32,7 +32,7 @@ The emulator is configured as per the schematic below.
 
 All of the external components except the level shifter are optional - you do not need to include the display and buttons if you are happy to hardcode mouse acceleration and joystick assignment settings in code. Also, if you only plan to use USB joysticks then you can omit the DB-9 connectors.
 
-The level shifter is required as the Atari uses 5V logic over the serial connection whereas the Pico uses 3.3V logic. You can possible get away with leaving UART_RX disconnected and connect UART_TX to the Atari without a level shifter but many games and applications will not work like this as they send commands to the IKBD/emulator.
+The level shifter is required as the Atari uses 5V logic over the serial connection whereas the Pico uses 3.3V logic. You can possible get away with leaving UART_RX disconnected and connect UART_TX to the Atari without a level shifter but many games and applications will not work like this as they send commands to the IKBD/emulator.atari_ikbd.uf2
 
 ## Compiling the Emulator Firmware
 
@@ -85,6 +85,9 @@ cmake ..
 
 make clean && make
 ```
+## Updating the firmware to the Pi Pico
+Once compiled, turn your Pi Pico ON while pressing the BOOTSEL button. Upload the atari_ikbd.uf2 file from the Build folder to the Pi Pico folder.
+
 ## Downloading the firmware
 If you don't know how or can't build the firmware by yourself, please find the released files here: https://github.com/klyde2278/atari-st-rpikb/releases
 

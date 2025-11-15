@@ -39,23 +39,23 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 # Select interface language
-set(LANGUAGE "EN" CACHE STRING "Select interface language: EN, FR, DE, SP, IT")
-if(LANGUAGE STREQUAL "FR")
-    add_definitions(-DLANG_FR)
-    set(LANG_SRC src/UserInterface_FR.cpp)
-elseif(LANGUAGE STREQUAL "DE")
-    add_definitions(-DLANG_DE)
-    set(LANG_SRC src/UserInterface_DE.cpp)
-elseif(LANGUAGE STREQUAL "SP")
-    add_definitions(-DLANG_SP)
-    set(LANG_SRC src/UserInterface_SP.cpp)
-elseif(LANGUAGE STREQUAL "IT")
-    add_definitions(-DLANG_IT)
-    set(LANG_SRC src/UserInterface_IT.cpp)
-else()
-    add_definitions(-DLANG_EN)
-    set(LANG_SRC src/UserInterface_EN.cpp)
-endif()
+#set(LANGUAGE "EN" CACHE STRING "Select interface language: EN, FR, DE, SP, IT")
+#if(LANGUAGE STREQUAL "FR")
+#    add_definitions(-DLANG_FR)
+#    set(LANG_SRC src/UserInterface_FR.cpp)
+#elseif(LANGUAGE STREQUAL "DE")
+#    add_definitions(-DLANG_DE)
+#    set(LANG_SRC src/UserInterface_DE.cpp)
+#elseif(LANGUAGE STREQUAL "SP")
+#    add_definitions(-DLANG_SP)
+#    set(LANG_SRC src/UserInterface_SP.cpp)
+#elseif(LANGUAGE STREQUAL "IT")
+#    add_definitions(-DLANG_IT)
+#    set(LANG_SRC src/UserInterface_IT.cpp)
+#else()
+#    add_definitions(-DLANG_EN)
+#    set(LANG_SRC src/UserInterface_EN.cpp)
+#endif()
 
 set(SOURCES
     src/main.cpp
@@ -66,7 +66,8 @@ set(SOURCES
     src/HidInput.cpp
     src/util.cpp
     src/UserInterface.cpp
-    ${LANG_SRC}  # Specific language source file
+#    ${LANG_SRC}  # Specific language source file
+    src/UserInterface_i18n.cpp
     src/NVSettings.cpp
     src/hid_app_host.c
     src/xinput_host.c  # Official tusb_xinput driver

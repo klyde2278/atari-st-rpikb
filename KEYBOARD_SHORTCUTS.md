@@ -1,6 +1,6 @@
 # Atari ST USB Adapter - Keyboard Shortcuts Reference
 
-## v7.0.0 Keyboard Shortcuts
+## v7.2.0 Keyboard Shortcuts
 
 ### System Control Shortcuts
 
@@ -15,8 +15,8 @@
 
 | Shortcut | Function | Description |
 |----------|----------|-------------|
-| **Alt+Plus** | Set 270MHz | Overclocks RP2040 to 270MHz for maximum performance |
-| **Alt+Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
+| **Alt+Keypad Plus** | Set 250MHz | Overclocks RP2040 to 250MHz for maximum performance |
+| **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
 
 ### Atari ST Key Mapping
 
@@ -63,12 +63,12 @@
 
 ---
 
-### Alt+Plus - 270MHz Overclock
+### Alt+Keypad Plus - 250MHz Overclock
 
 **Purpose:** Set RP2040 CPU to maximum speed for best performance
 
 **What happens:**
-- CPU clock changes from current speed to 270MHz
+- CPU clock changes from current speed to 250MHz
 - All processing becomes 80% faster
 - Better serial communication performance
 - More responsive IKBD command processing
@@ -80,7 +80,7 @@
 
 ---
 
-### Alt+Minus - 150MHz Stability
+### Alt+Keypad Minus - 150MHz Stability
 
 **Purpose:** Set RP2040 CPU to stable speed
 
@@ -141,8 +141,8 @@ for (int i = 0; i < 6; ++i) {
 | F11 | 0x44 | 68 | XRESET trigger |
 | F12 | 0x45 | 69 | Mouse toggle |
 | / | 0x38 | 56 | INSERT key mapping |
-| +/= | 0x2E | 46 | Clock speed up |
-| - | 0x2D | 45 | Clock speed down |
+| - | 0x56 | 86 | Clock speed up |
+| + | 0x57 | 87 | Clock speed down |
 
 ### Blocking from Atari ST
 
@@ -167,8 +167,8 @@ This prevents the Atari ST from seeing the shortcut keys.
 |----------|--------------|
 | **Ctrl+F11** | "RESET" (large) + "Ctrl+F11" (small) |
 | **Ctrl+F12** | Mode change shown in status display |
-| **Alt+Plus** | Clock speed change (if debug enabled) |
-| **Alt+Minus** | Clock speed change (if debug enabled) |
+| **Alt+Keypad Plus** | Clock speed change (if debug enabled) |
+| **Alt+Keypad Minus** | Clock speed change (if debug enabled) |
 | **Alt+/** | No display (key sent to Atari) |
 
 ### Status Page
@@ -220,9 +220,9 @@ The OLED status page shows:
 - Check if Atari ST receives the key
 
 **Clock speed not changing:**
-- Alt+Plus and Alt+Minus should work
+- Alt+ Keypad Plus and Alt+Keypad Minus should work
 - Check console output for clock change messages
-- Default is 270MHz on boot
+- Default is 250MHz on boot
 
 ---
 
@@ -253,7 +253,15 @@ The emulator now fully supports Xbox controllers using the official TinyUSB XInp
 
 ## Version History
 
-### v7.1.0 (Current)
+### v7.2.0 (Current)
+- Added Language selection screen
+- Added language saved to the settings
+- Consolidated translations to one file (UserInterface_i18n.cpp)
+- Rolled CPU high speed back to 250MHz, as I was experiencing instability / freezes with my Pi Pico at 270MHz
+- Changed Alt + (+) and Alt + (-) shortcuts to Keypad (+) and Keypad (-) as some keyboard layout don't have a (+) and (-) key next to each other
+- Changed USB debug page strings as they were going out of the display
+
+### v7.1.0
 - Numlock LED turns ON when the keyboard is plugged in and acts as a Power On Light
 - CapsLock LED turns On and OFF when the Caps Lock key is pressed
 - The CPU speed in now shown in real time
@@ -297,8 +305,8 @@ The Atari ST USB adapter now supports **9 keyboard shortcuts** plus full Xbox co
 2. **Ctrl+F11** - Reset IKBD (XRESET)
 3. **Ctrl+F10** - Toggle Joystick 1 source (D-SUB/USB)
 4. **Ctrl+F9** - Toggle Joystick 0 source (D-SUB/USB)
-5. **Alt+Plus** - Set 270MHz (performance)
-6. **Alt+Minus** - Set 150MHz (stability)
+5. **Alt+Keypad Plus** - Set 250MHz (performance)
+6. **Alt+Keypad Minus** - Set 150MHz (stability)
 7. **Alt+/** - Send INSERT key
 8. **Alt+[** - Send keypad divide key
 9. **Alt+]** - Send keypad multiply key
@@ -313,7 +321,7 @@ These shortcuts provide full control over the adapter's behavior while maintaini
 
 ---
 
-**Version:** 7.0.0  
-**Date:** October 18, 2025  
+**Version:** 7.2.0  
+**Date:** November 15, 2025  
 **Status:** ✅ All shortcuts and Xbox controller support implemented and tested
 

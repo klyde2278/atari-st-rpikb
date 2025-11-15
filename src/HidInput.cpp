@@ -45,6 +45,9 @@ extern ssd1306_t disp;  // External reference to display
 #define HID_KEY_EQUAL 0x2E  // = key (also + with shift) (46 decimal)
 #define HID_KEY_MINUS 0x2D  // - key (45 decimal)
 
+#define HID_KEY_KEYPAD_SUBTRACT 0x56 // - keypad (86 decimal)
+#define HID_KEY_KEYPAD_ADD      0x57 // + keypad (87 decimal)
+
 #define ATARI_LSHIFT 42
 #define ATARI_RSHIFT 54
 #define ATARI_ALT    56
@@ -259,20 +262,20 @@ void HidInput::handle_keyboard() {
                 }
             }
             
-            // Check for Alt + Plus (=) to set 270MHz
+            // Check for Alt + Plus (=) to set 250MHz
             static bool last_plus_state = false;
             bool plus_pressed = false;
             for (int i = 0; i < 6; ++i) {
-                if (kb->keycode[i] == HID_KEY_EQUAL) {
+                if (kb->keycode[i] == HID_KEY_KEYPAD_ADD) {
                     plus_pressed = true;
                     break;
                 }
             }
             if (alt_pressed && plus_pressed) {
                 if (!last_plus_state) {
-                    set_sys_clock_khz(270000, false);
+                    set_sys_clock_khz(250000, false);
                     last_plus_state = true;
-					ui_->set_cpu_speed(270000);
+					ui_->set_cpu_speed(250000);
                 }
             } else {
                 last_plus_state = false;
@@ -282,7 +285,7 @@ void HidInput::handle_keyboard() {
             static bool last_minus_state = false;
             bool minus_pressed = false;
             for (int i = 0; i < 6; ++i) {
-                if (kb->keycode[i] == HID_KEY_MINUS) {
+                if (kb->keycode[i] == HID_KEY_KEYPAD_SUBTRACT) {
                     minus_pressed = true;
                     break;
                 }

@@ -9,7 +9,7 @@ The emulator displays a simple user interface on an OLED display. This is entire
 it is certainly useful to show successful connection of your USB devices as well as to allow the mouse speed to be tweaked and to view the data
 flowing between the emulator and the Atari ST.
 
-The interface is now available in English, French, German, Spanish and Italian.
+The interface is now available in English, French, German, Spanish and Italian. You can choose the language directly from the screen.
 
 ![English](mouse_EN.jpg) &emsp; ![French](mouse_FR.jpg) &emsp; ![German](mouse_DE.jpg)
 
@@ -47,16 +47,12 @@ Compiling on the mac requires xcode, gcc amd armi embedded toolchain. A build ca
 brew install gcc armmbed/formulae/arm-none-eabi-gcc
 
 # Clone the main repo
-git clone -b main  https://github.com/trickydee/atari-st-rpikb
+git clone -b main  https://github.com/klyde2278/atari-st-rpikb
 cd atari-st-rpikb
 
 # Sync submodules
 git submodule sync
 git submodule update --init --recursive
-
-# fix missing hidparser include in cmakelists.txt
-cp pico-sdk/src/rp2_common/tinyusb/CMakeLists.txt pico-sdk/src/rp2_common/tinyusb/CMakeLists.old
-sed -E $'91i\\\n            ${PICO_TINYUSB_PATH}/src/class/hid/hidparser/HIDParser.c\n' pico-sdk/src/rp2_common/tinyusb/CMakeLists.old > pico-sdk/src/rp2_common/tinyusb/CMakeLists.txt
 
 # Build
 cmake -B build -S . && cd build && make
@@ -81,18 +77,13 @@ git submodule update --init --recursive
 mkdir build
 cd build
 
-# Choose one of the cmake command below according to the language you want to display:
-cmake -DLANGUAGE=EN ..  # For English language
-#or
-cmake -DLANGUAGE=FR ..  # For French language
-#or
-cmake -DLANGUAGE=DE ..  # For German language
-#or
-cmake -DLANGUAGE=SP ..  # For Spanish language
-#or
-cmake -DLANGUAGE=IT ..  # For Italian language
+#From the build folder:
 
-make
+cmake ..
+
+#Wait for completion, then type:
+
+make clean && make
 ```
 ## Downloading the firmware
 If you don't know how or can't build the firmware by yourself, please find the released files here: https://github.com/klyde2278/atari-st-rpikb/releases
@@ -135,8 +126,8 @@ The emulator supports several keyboard shortcuts for convenient control:
 | **Alt+/** | INSERT Key | Sends Atari ST INSERT key (useful for modern keyboards) |
 | **Alt+[** | Keypad /** | Sends Atari ST keypad divide key |
 | **Alt+]** | Keypad *** | Sends Atari ST keypad multiply key |
-| **Alt+Plus** | Set 270MHz | Overclocks RP2040 to 270MHz for maximum performance |
-| **Alt+Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
+| **Alt+Keypad Plus** | Set 250MHz | Overclocks RP2040 to 250MHz for maximum performance |
+| **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
 
 For detailed information about keyboard shortcuts, see [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).
 

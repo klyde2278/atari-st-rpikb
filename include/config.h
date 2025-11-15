@@ -43,7 +43,7 @@
 #define JOY1_RIGHT          13
 #define JOY1_FIRE           14
 
-// Joystick 0
+// Joystick 04
 #define JOY0_UP             19
 #define JOY0_DOWN           20
 #define JOY0_LEFT           21
@@ -53,5 +53,5 @@
 // Performance tuning
 // Default CPU clock speed in kHz
 // 150000 = 150MHz (default/safe)
-// 270000 = 270MHz (maximum performance)
-#define DEFAULT_CPU_CLOCK_KHZ   270000
+// 250000 = 250MHz (maximum performance)
+#define DEFAULT_CPU_CLOCK_KHZ   150000

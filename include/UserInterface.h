@@ -26,7 +26,7 @@
 #define MOUSE_MIN -7
 #define MOUSE_MAX 8
 
-extern const char* get_translation(const char* key, int lang_idx);
+//extern const char* get_translation(const char* key, int lang_idx);
 
 class UserInterface {
 public:
@@ -118,5 +118,6 @@ private:
 	absolute_time_t debug_usb_tm;
     uint        btn_gpio[3];
     int         btn_count[3];
+	int			lang_idx = 0;
 };
 

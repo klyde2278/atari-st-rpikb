@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 #include "UserInterface.h"
+#include "UserInterface_i18n.h"
 #include "version.h"
 #include "pico/stdlib.h"
 #include "hid_app_host.h"
@@ -25,8 +26,7 @@
 
 #define DEBOUNCE_COUNT 10
 
-static const char* languages[] = { "EN", "FR", "DE", "SP", "IT" };
-static const int NUM_LANGUAGES = sizeof(languages) / sizeof(languages[0]);
+
 static int lang_idx = 0;
 
 enum BUTTONS {
@@ -125,13 +125,13 @@ void UserInterface::update_status() {
     uint32_t cpu_freq = clock_get_hz(clk_sys);
     //uint32_t cpu_freq = 123;
     ssd1306_clear(&disp);
-    sprintf(buf, "%s %d", get_translation("USB Keyboard", lang_idx), num_kb);
+    sprintf(buf, "%s %d", get_translation(KEY_USB_KEYBOARD, lang_idx), num_kb);
     ssd1306_draw_string(&disp, 0, 0, 1,  buf);
-    sprintf(buf, "%s %d", get_translation("USB Mouse", lang_idx), num_mouse);
+    sprintf(buf, "%s %d", get_translation(KEY_USB_MOUSE, lang_idx), num_mouse);
     ssd1306_draw_string(&disp, 0, 9, 1,  buf);
-    sprintf(buf, "%s %d", get_translation("USB Joystick", lang_idx), num_joy);
+    sprintf(buf, "%s %d", get_translation(KEY_USB_JOYSTICK, lang_idx), num_joy);
     ssd1306_draw_string(&disp, 0, 18, 1, buf);
-    sprintf(buf, "%s", get_translation(settings.get_settings().mouse_enabled ? "Mouse enabled" : "Joy 0 enabled", lang_idx));
+    sprintf(buf, "%s", get_translation(settings.get_settings().mouse_enabled ? KEY_MOUSE_ENABLED : KEY_JOY0_ENABLED, lang_idx));
     ssd1306_draw_string(&disp, 0, 27, 1, buf);
     sprintf(buf, "CPU: %.2f MHz", static_cast<double>(cpu_freq) / 1000000.0);
     ssd1306_draw_string(&disp, 0, 36, 1, buf);
@@ -144,7 +144,7 @@ void UserInterface::set_cpu_speed(uint32_t khz) {
 
 void UserInterface::update_mouse() {
     char buf[32];
-    ssd1306_draw_string(&disp, 0, 45, 1, get_translation("Mouse speed", lang_idx));
+    ssd1306_draw_string(&disp, 0, 45, 1, get_translation(KEY_MOUSE_SPEED, lang_idx));
     sprintf(buf, "[==============]");
     buf[settings.get_settings().mouse_speed - MOUSE_MIN] = '*';
     ssd1306_draw_string(&disp, 0, 54, 1, buf);
@@ -202,8 +202,8 @@ void UserInterface::update_usb_debug() {
 
 void UserInterface::update_language() {
     ssd1306_clear(&disp);
-    ssd1306_draw_string(&disp, 0, 0, 1, get_translation("Language", lang_idx));
-    const char* lang = languages[settings.get_settings().language_index];
+    ssd1306_draw_string(&disp, 0, 0, 1, get_translation(KEY_LANGUAGE, lang_idx));
+    const char* lang = languages[lang_idx];
     ssd1306_draw_string(&disp, 0, 30, 2, (char*)lang);
 }
 
@@ -255,7 +255,6 @@ void UserInterface::on_button_down(int i) {
             dirty = true;
         }
 		else if (page == PAGE_LANGUAGE) {
-			lang_idx = settings.get_settings().language_index;
 			lang_idx = (lang_idx - 1 + NUM_LANGUAGES) % NUM_LANGUAGES;
 			settings.get_settings().language_index = lang_idx;
 			settings.write();
@@ -276,7 +275,6 @@ void UserInterface::on_button_down(int i) {
             dirty = true;
         }
 		else if (page == PAGE_LANGUAGE) {
-			lang_idx = settings.get_settings().language_index;
 			lang_idx = (lang_idx + 1) % NUM_LANGUAGES;
 			settings.get_settings().language_index = lang_idx;
 			settings.write();
@@ -322,11 +320,10 @@ void UserInterface::update() {
             if (absolute_time_diff_us(debug_usb_tm, tm) >= (500 * 1000)) {
                 debug_usb_tm = tm;
                 update_usb_debug();
+				ssd1306_show(&disp);
+				// Keep refreshing debug page every 500ms
+				dirty=true;
 			}
-			else {
-                // Not time yet
-                dirty = true;
-            }
         }
 		else if (page == PAGE_LANGUAGE) {
 			update_language();

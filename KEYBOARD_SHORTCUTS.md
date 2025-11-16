@@ -253,7 +253,10 @@ The emulator now fully supports Xbox controllers using the official TinyUSB XInp
 
 ## Version History
 
-### v7.2.0 (Current)
+### v7.2.1 (Current)
+- Changed translation logic
+
+### v7.2.0
 - Added Language selection screen
 - Added language saved to the settings
 - Consolidated translations to one file (UserInterface_i18n.cpp)
@@ -321,7 +324,7 @@ These shortcuts provide full control over the adapter's behavior while maintaini
 
 ---
 
-**Version:** 7.2.0  
-**Date:** November 15, 2025  
+**Version:** 7.2.1 
+**Date:** November 16, 2025  
 **Status:** ✅ All shortcuts and Xbox controller support implemented and tested
 

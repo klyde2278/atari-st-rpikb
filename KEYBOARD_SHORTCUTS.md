@@ -1,6 +1,6 @@
 # Atari ST USB Adapter - Keyboard Shortcuts Reference
 
-## v7.2.0 Keyboard Shortcuts
+## v7.3.0 Keyboard Shortcuts
 
 ### System Control Shortcuts
 
@@ -15,7 +15,7 @@
 
 | Shortcut | Function | Description |
 |----------|----------|-------------|
-| **Alt+Keypad Plus** | Set 250MHz | Overclocks RP2040 to 250MHz for maximum performance |
+| **Alt+Keypad Plus** | Set 270MHz | Overclocks RP2040 to 250MHz for maximum performance |
 | **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
 
 ### Atari ST Key Mapping
@@ -63,12 +63,12 @@
 
 ---
 
-### Alt+Keypad Plus - 250MHz Overclock
+### Alt+Keypad Plus - 270MHz Overclock
 
 **Purpose:** Set RP2040 CPU to maximum speed for best performance
 
 **What happens:**
-- CPU clock changes from current speed to 250MHz
+- CPU clock changes from current speed to 270MHz
 - All processing becomes 80% faster
 - Better serial communication performance
 - More responsive IKBD command processing
@@ -141,8 +141,8 @@ for (int i = 0; i < 6; ++i) {
 | F11 | 0x44 | 68 | XRESET trigger |
 | F12 | 0x45 | 69 | Mouse toggle |
 | / | 0x38 | 56 | INSERT key mapping |
-| - | 0x56 | 86 | Clock speed up |
-| + | 0x57 | 87 | Clock speed down |
+| Keypad - | 0x56 | 86 | Clock speed down |
+| Keypad + | 0x57 | 87 | Clock speed up |
 
 ### Blocking from Atari ST
 
@@ -220,9 +220,9 @@ The OLED status page shows:
 - Check if Atari ST receives the key
 
 **Clock speed not changing:**
-- Alt+ Keypad Plus and Alt+Keypad Minus should work
+- Alt+Keypad Plus and Alt+Keypad Minus should work
 - Check console output for clock change messages
-- Default is 250MHz on boot
+- Default is 150MHz on boot
 
 ---
 
@@ -253,7 +253,11 @@ The emulator now fully supports Xbox controllers using the official TinyUSB XInp
 
 ## Version History
 
-### v7.2.1 (Current)
+### v7.3.0 (Current)
+- Default CPU speed at 150MHz for better stability
+- CPU High speed back at 270MHz
+
+### v7.2.1
 - Changed translation logic
 
 ### v7.2.0
@@ -308,7 +312,7 @@ The Atari ST USB adapter now supports **9 keyboard shortcuts** plus full Xbox co
 2. **Ctrl+F11** - Reset IKBD (XRESET)
 3. **Ctrl+F10** - Toggle Joystick 1 source (D-SUB/USB)
 4. **Ctrl+F9** - Toggle Joystick 0 source (D-SUB/USB)
-5. **Alt+Keypad Plus** - Set 250MHz (performance)
+5. **Alt+Keypad Plus** - Set 270MHz (performance)
 6. **Alt+Keypad Minus** - Set 150MHz (stability)
 7. **Alt+/** - Send INSERT key
 8. **Alt+[** - Send keypad divide key
@@ -324,7 +328,7 @@ These shortcuts provide full control over the adapter's behavior while maintaini
 
 ---
 
-**Version:** 7.2.1 
-**Date:** November 16, 2025  
+**Version:** 7.3.0
+**Date:** December 7, 2025  
 **Status:** ✅ All shortcuts and Xbox controller support implemented and tested
 

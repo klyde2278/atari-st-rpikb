@@ -129,7 +129,7 @@ The emulator supports several keyboard shortcuts for convenient control:
 | **Alt+/** | INSERT Key | Sends Atari ST INSERT key (useful for modern keyboards) |
 | **Alt+[** | Keypad /** | Sends Atari ST keypad divide key |
 | **Alt+]** | Keypad *** | Sends Atari ST keypad multiply key |
-| **Alt+Keypad Plus** | Set 250MHz | Overclocks RP2040 to 250MHz for maximum performance |
+| **Alt+Keypad Plus** | Set 270MHz | Overclocks RP2040 to 270MHz for maximum performance |
 | **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
 
 For detailed information about keyboard shortcuts, see [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).

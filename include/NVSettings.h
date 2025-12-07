@@ -36,6 +36,9 @@ struct Settings {
     // Bit0 = Joystick 0
     // Bit1 = Joystick 1
     uint8_t     joy_device;
+	
+	// Language index: 0 = EN, 1 = FR, 2 = DE, 3 = SP, 4 = IT
+    uint8_t     language_index;
 };
 
 class NVSettings {

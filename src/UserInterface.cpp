@@ -26,7 +26,6 @@
 
 #define DEBOUNCE_COUNT 10
 
-
 static int lang_idx = 0;
 
 enum BUTTONS {
@@ -71,12 +70,10 @@ void UserInterface::init() {
         mouse_speed = MOUSE_MAX;
         settings.get_settings().mouse_speed = mouse_speed;
     }
-
+	
 	lang_idx = settings.get_settings().language_index;
-
+	
     serial_tm = get_absolute_time();
-	debug_usb_tm = get_absolute_time();
-
 }
 
 void UserInterface::usb_connect_state(int kb, int mouse, int joy) {
@@ -105,6 +102,7 @@ void UserInterface::set_mouse_enabled(uint8_t en) {
     settings.write();
     dirty = true;
 }
+
 
 void UserInterface::update_serial() {
     uint8_t y = 0;
@@ -176,7 +174,7 @@ void UserInterface::update_usb_debug() {
     ssd1306_draw_string(&disp, 0, 0, 1, (char*)"USB Debug Info");
     
     // Device counts
-    sprintf(buf, "KB:%d Ms:%d Joy:%d", num_kb, num_mouse, num_joy);
+    sprintf(buf, "KB:%d MS:%d Joy:%d", num_kb, num_mouse, num_joy);
     ssd1306_draw_string(&disp, 0, 12, 1, buf);
     
     // Mount and active device tracking
@@ -237,7 +235,7 @@ void UserInterface::on_button_down(int i) {
     // Middle button changes page
     if (i == BUTTON_MIDDLE) {
         int pg = (int)page;
-        pg = ((pg + 1) % (PAGE_USB_DEBUG + 1)); // Mention here what should be the last PAGE of the Enum
+        pg = ((pg + 1) % (PAGE_USB_DEBUG + 1));
         page = (PAGE)pg;
         dirty = true;
     }
@@ -316,18 +314,20 @@ void UserInterface::update() {
             update_splash();
         }
         else if (page == PAGE_USB_DEBUG) {
-			absolute_time_t tm = get_absolute_time();
-            if (absolute_time_diff_us(debug_usb_tm, tm) >= (500 * 1000)) {
-                debug_usb_tm = tm;
-                update_usb_debug();
-				ssd1306_show(&disp);
-				// Keep refreshing debug page every 500ms
-				dirty=true;
-			}
+		static absolute_time_t usb_debug_tm = get_absolute_time();
+        absolute_time_t tm = get_absolute_time();
+		if (absolute_time_diff_us(usb_debug_tm, tm) >= (100 * 1000)) {
+			usb_debug_tm = tm;
+			update_usb_debug();
+			ssd1306_show(&disp);
+		   }
+		   else {
+				dirty = true;
+		   }
         }
 		else if (page == PAGE_LANGUAGE) {
 			update_language();
-		}		
+		}
         if (!dirty) {
             ssd1306_show(&disp);
         }

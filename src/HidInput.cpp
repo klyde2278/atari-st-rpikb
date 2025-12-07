@@ -273,9 +273,9 @@ void HidInput::handle_keyboard() {
             }
             if (alt_pressed && plus_pressed) {
                 if (!last_plus_state) {
-                    set_sys_clock_khz(250000, false);
+                    set_sys_clock_khz(270000, false);
                     last_plus_state = true;
-					ui_->set_cpu_speed(250000);
+					ui_->set_cpu_speed(270000);
                 }
             } else {
                 last_plus_state = false;
@@ -315,7 +315,7 @@ void HidInput::handle_keyboard() {
                     // Show visual feedback on OLED
                     ssd1306_clear(&disp);
                     ssd1306_draw_string(&disp, 30, 20, 2, (char*)"RESET");
-                    ssd1306_draw_string(&disp, 20, 45, 1, (char*)"Ctrl+F11");
+                    ssd1306_draw_string(&disp, 20, 45, 1, (char*)"Ctrl F11");
                     ssd1306_show(&disp);
                     
                     // Small delay so user can see the message
@@ -440,9 +440,14 @@ void HidInput::handle_keyboard() {
                         st_keys[i] = 102;  // Atari keypad *
                     }
                     // If Alt + Plus or Alt + Minus, don't send to Atari (used for clock control)
-                    else if (alt_pressed && (kb->keycode[i] == HID_KEY_EQUAL || kb->keycode[i] == HID_KEY_MINUS)) {
+                    else if (alt_pressed && (kb->keycode[i] == HID_KEY_KEYPAD_ADD || kb->keycode[i] == HID_KEY_KEYPAD_SUBTRACT)) {
                         st_keys[i] = 0;
                     }
+					// If Ctrl+F12, don't send to Atari (used for Mouse Enabled / Joy 0 Enabled toggle)
+                    else if (ctrl_pressed && kb->keycode[i] == TOGGLE_MOUSE_MODE) {
+                        st_keys[i] = 0;
+                    }
+					
                     // If Ctrl+F11, don't send to Atari (used for XRESET)
                     else if (ctrl_pressed && kb->keycode[i] == XRESET_KEY) {
                         st_keys[i] = 0;
@@ -755,22 +760,22 @@ void HidInput::handle_joystick() {
         if (ui_->get_joystick() & (1 << joystick)) {
             // GPIO
             if (joystick == 1) {
-                mouse_state = (mouse_state & 0xfe) | (gpio_get(JOY1_FIRE) ? 0 : 1);
-                axis |= (gpio_get(JOY1_UP)) ? 0 : 1;
-                axis |= (gpio_get(JOY1_DOWN)) ? 0 : 2;
-                axis |= (gpio_get(JOY1_LEFT)) ? 0 : 4;
-                axis |= (gpio_get(JOY1_RIGHT)) ? 0 : 8;
-                joystick_state &= ~(0xf << 4);
-                joystick_state |= (axis << 4);
-            }
-            else if (!ui_->get_mouse_enabled()) {
-                mouse_state = (mouse_state & 0xfd) | (gpio_get(JOY0_FIRE) ? 0 : 2);
-                axis |= (gpio_get(JOY0_UP)) ? 0 : 1;
-                axis |= (gpio_get(JOY0_DOWN)) ? 0 : 2;
-                axis |= (gpio_get(JOY0_LEFT)) ? 0 : 4;
-                axis |= (gpio_get(JOY0_RIGHT)) ? 0 : 8;
-                joystick_state &= ~0xf;
-                joystick_state |= axis;
+				mouse_state = (mouse_state & 0xfe) | (gpio_get(JOY1_FIRE) ? 0 : 1);	
+				axis |= (gpio_get(JOY1_UP)) ? 0 : 1;
+				axis |= (gpio_get(JOY1_DOWN)) ? 0 : 2;
+				axis |= (gpio_get(JOY1_LEFT)) ? 0 : 4;
+				axis |= (gpio_get(JOY1_RIGHT)) ? 0 : 8;
+				joystick_state &= ~(0xf << 4);
+				joystick_state |= (axis << 4);
+			}
+			else if (!ui_->get_mouse_enabled()) {
+				mouse_state = (mouse_state & 0xfd) | (gpio_get(JOY0_FIRE) ? 0 : 2);
+				axis |= (gpio_get(JOY0_UP)) ? 0 : 1;
+				axis |= (gpio_get(JOY0_DOWN)) ? 0 : 2;
+				axis |= (gpio_get(JOY0_LEFT)) ? 0 : 4;
+				axis |= (gpio_get(JOY0_RIGHT)) ? 0 : 8;
+				joystick_state &= ~0xf;
+				joystick_state |= axis;
             }
         }
         else {

@@ -38,25 +38,6 @@ set(CMAKE_CXX_STANDARD 17)
 # Initialize the SDK
 pico_sdk_init()
 
-# Select interface language
-#set(LANGUAGE "EN" CACHE STRING "Select interface language: EN, FR, DE, SP, IT")
-#if(LANGUAGE STREQUAL "FR")
-#    add_definitions(-DLANG_FR)
-#    set(LANG_SRC src/UserInterface_FR.cpp)
-#elseif(LANGUAGE STREQUAL "DE")
-#    add_definitions(-DLANG_DE)
-#    set(LANG_SRC src/UserInterface_DE.cpp)
-#elseif(LANGUAGE STREQUAL "SP")
-#    add_definitions(-DLANG_SP)
-#    set(LANG_SRC src/UserInterface_SP.cpp)
-#elseif(LANGUAGE STREQUAL "IT")
-#    add_definitions(-DLANG_IT)
-#    set(LANG_SRC src/UserInterface_IT.cpp)
-#else()
-#    add_definitions(-DLANG_EN)
-#    set(LANG_SRC src/UserInterface_EN.cpp)
-#endif()
-
 set(SOURCES
     src/main.cpp
     src/HD6301V1ST.cpp

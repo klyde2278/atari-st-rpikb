@@ -9,14 +9,12 @@ The emulator displays a simple user interface on an OLED display. This is entire
 it is certainly useful to show successful connection of your USB devices as well as to allow the mouse speed to be tweaked and to view the data
 flowing between the emulator and the Atari ST.
 
-The interface is now available in English, French, German, Spanish and Italian. You can choose the language directly from the screen.
-
-![English](mouse_EN.jpg) &emsp; ![French](mouse_FR.jpg) &emsp; ![German](mouse_DE.jpg)
-
-![Spanish](mouse_SP.jpg) &emsp; ![Italian](mouse_IT.jpg)
-
 The emulator supports both USB and Atari ST compatible joysticks, supported a maximum of two joysticks at a time. Using the user interface
 you can select whether the USB joystick or Atari joystick are assigned to Joysticks 0 and 1.
+
+This project is designed to work with the Atari Eiffel Pico USB device offered on my website store: https://klydes-korner.site/
+
+
 
 ## How it works
 The Atari ST keyboard contains an HD6301 microcontroller that can be programmed by the Atari TOS or by user applications to read the keyboard, mouse and joysticks. The keyboard is connected to the Atari via a serial interface. Commands can be sent from the Atari to the keyboard and the keyboard sends mouse movements, keystrokes and joystick states to the Atari.

@@ -28,6 +28,7 @@
 // xinput.h removed - using official xinput_host.h driver now
 #include "ps4_controller.h"
 #include <map>
+#include <stdint.h>
 
 extern ssd1306_t disp;  // External reference to display
 
@@ -62,7 +63,56 @@ static int kb_count = 0;
 static int mouse_count = 0;
 static int joy_count = 0;
 static uint8_t current_led_state = 0x01; // NumLock state
+static const uint8_t* s_current_lookup = nullptr;
 
+extern "C" {
+  extern const uint8_t st_key_lookup_hid_cz_cz[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_de_ch[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_de_de[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_dk_dk[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_en_uk[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_en_us[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_es_es[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_fi_fi[ST_KEY_LOOKUP_SIZE]; 
+  extern const uint8_t st_key_lookup_hid_fr_ch[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_fr_fr[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_hu_hu[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_it_it[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_nl_nl[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_no_no[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_pl_pl[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid_se_se[ST_KEY_LOOKUP_SIZE];
+}
+static const uint8_t* s_default_lookup = st_key_lookup_hid_en_us;
+
+// ----------------------------------------------------------------------------
+// UI index -> KeyboardLayout mapping helper
+static KeyboardLayout map_index_to_layout(unsigned idx)
+{
+  switch (idx) {
+    case 0: return KeyboardLayout::CZ_CZ;
+    case 1: return KeyboardLayout::DE_CH;
+    case 2: return KeyboardLayout::DE_DE;
+    case 3: return KeyboardLayout::DK_DK;
+    case 4: return KeyboardLayout::EN_UK;
+    case 5: return KeyboardLayout::EN_US;
+    case 6: return KeyboardLayout::ES_ES;
+    case 7: return KeyboardLayout::FI_FI;
+    case 8: return KeyboardLayout::FR_CH;
+    case 9: return KeyboardLayout::FR_FR;
+    case 10: return KeyboardLayout::HU_HU;
+    case 11: return KeyboardLayout::IT_IT;
+    case 12: return KeyboardLayout::NL_NL;
+    case 13: return KeyboardLayout::NO_NO;
+    case 14: return KeyboardLayout::PL_PL;
+    case 15: return KeyboardLayout::SE_SE;
+    default: return KeyboardLayout::EN_US;
+  }
+}
+void HidInput::set_layout_from_index(unsigned ui_index)
+{
+  set_layout(map_index_to_layout(ui_index));
+}
 
 extern "C" {
 
@@ -104,9 +154,9 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
     ssd1306_show(&disp);
     sleep_ms(2000);
     #endif
-    
+	
     if (tp == HID_KEYBOARD) {
-    if (device.find(actual_addr) == device.end()) {
+		if (device.find(actual_addr) == device.end()) {
         device[actual_addr] = new uint8_t[sizeof(hid_keyboard_report_t)];
         hid_app_request_report(actual_addr, device[actual_addr]);
         ++kb_count;
@@ -222,6 +272,63 @@ void HidInput::open(const std::string& kbdev, const std::string& mousedev, const
 
 void HidInput::force_usb_mouse() {
     ui_->set_mouse_enabled(true);
+}
+
+void HidInput::set_layout(KeyboardLayout l)
+{
+  switch (l) {
+	case KeyboardLayout::CZ_CZ:
+	s_current_lookup = st_key_lookup_hid_cz_cz;
+	break;
+	case KeyboardLayout::DE_CH:
+    s_current_lookup = st_key_lookup_hid_de_ch;
+	break;
+	case KeyboardLayout::DE_DE:
+    s_current_lookup = st_key_lookup_hid_de_de;
+	break;
+	case KeyboardLayout::DK_DK:
+    s_current_lookup = st_key_lookup_hid_dk_dk;
+	break;
+    case KeyboardLayout::EN_UK:
+	s_current_lookup = st_key_lookup_hid_en_uk;
+	break;
+    case KeyboardLayout::EN_US:
+	s_current_lookup = st_key_lookup_hid_en_us;
+	break;
+	case KeyboardLayout::ES_ES:
+    s_current_lookup = st_key_lookup_hid_es_es;
+	break;
+	case KeyboardLayout::FI_FI:
+    s_current_lookup = st_key_lookup_hid_fi_fi;
+	break;
+	case KeyboardLayout::FR_CH:
+    s_current_lookup = st_key_lookup_hid_fr_ch;
+	break;
+	case KeyboardLayout::FR_FR:
+	s_current_lookup = st_key_lookup_hid_fr_fr;
+	break;
+	case KeyboardLayout::HU_HU:
+    s_current_lookup = st_key_lookup_hid_hu_hu;
+	break;
+	case KeyboardLayout::IT_IT:
+    s_current_lookup = st_key_lookup_hid_it_it;
+	break;
+	case KeyboardLayout::NL_NL:
+    s_current_lookup = st_key_lookup_hid_nl_nl;
+	break;
+	case KeyboardLayout::NO_NO:
+    s_current_lookup = st_key_lookup_hid_no_no;
+	break;
+	case KeyboardLayout::PL_PL:
+    s_current_lookup = st_key_lookup_hid_pl_pl;
+	break;
+	case KeyboardLayout::SE_SE:
+    s_current_lookup = st_key_lookup_hid_se_se;
+	break;
+    default:
+      s_current_lookup = s_default_lookup;
+	  break;
+  }
 }
 
 void HidInput::handle_keyboard() {
@@ -461,7 +568,7 @@ void HidInput::handle_keyboard() {
                         st_keys[i] = 0;
                     }
                     else {
-                        st_keys[i] = st_key_lookup_hid_gb[kb->keycode[i]];
+                        st_keys[i] = s_current_lookup[kb->keycode[i]];
                     }
                 }
                 else {

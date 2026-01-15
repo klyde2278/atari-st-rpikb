@@ -7,15 +7,25 @@ const int NUM_LANGUAGES = sizeof(languages) / sizeof(languages[0]);
 
 static const char* translations[][KEY_COUNT] = {
     // EN
-    { "USB Keyboard  ", "USB Mouse     ", "USB Joystick  ", "Mouse enabled", "Joy 0 enabled", "Mouse speed", "Language" },
+    { "USB Keyboard  ", "USB Mouse     ", "USB Joystick  ", "Mouse enabled", "Joy 0 enabled", "Mouse speed", "Language", "USB Keyboard",
+	  "Help", "USB<->Atari mouse", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
+	  "Set CPU 270 MHz", "Set CPU 150 MHz"},
     // FR
-    { "Clavier USB   ", "Souris USB    ", "Joystick USB  ", "Souris activ(e", "Joy 0 activ(", "Vitesse souris", "Langue" },
+    { "Clavier USB   ", "Souris USB    ", "Joystick USB  ", "Souris activée", "Joy 0 activé", "Vitesse souris", "Langue", "Clavier USB",
+	  "Aide", "souris USB<->Atari", "Réinitialiser", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
+	  "Activer 270 MHz", "Activer 150 MHz"},
     // DE
-    { "USB-Tastatur  ", "USB-Maus      ", "USB-Joystick  ", "Maus aktiviert", "Joy 0 aktivert", "Maus-geschw.", "Sprache" },
+    { "USB-Tastatur  ", "USB-Maus      ", "USB-Joystick  ", "Maus aktiviert", "Joy 0 aktivert", "Maus-geschw.", "Sprache", "USB-Tastatur",
+	  "Hilfe", "Maus USB<->Atari", "Zurücksetzen", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
+	  "CPU 270 MHz", "CPU 150 MHz"},
     // SP
-    { "Teclado USB   ", "Rat)n USB     ", "Joystick USB  ", "Rat)n habilitado", "Joy 0 habilitado", "Velocidad Rat)n", "Idioma" },
+    { "Teclado USB   ", "Ratón USB     ", "Joystick USB  ", "Ratón habilitado", "Joy 0 habilitado", "Velocidad Ratón", "Idioma", "Teclado USB",
+	  "Ayuda", "ratón USB<->Atari", "Reiniciar", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
+	  "Habilitar 270 MHz", "Habilitar 150 MHz"},
     // IT
-    { "Tastiera USB  ", "Mouse USB     ", "Joystick USB  ", "Mouse abilitato", "Joy 0 abilitato", "Velocit+ mouse", "Lingua" }
+    { "Tastiera USB  ", "Mouse USB     ", "Joystick USB  ", "Mouse abilitato", "Joy 0 abilitato", "Velocità mouse", "Lingua", "Tastiera USB",
+	  "Aiuto", "mouse USB<->Atari", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
+	  "Abilita 270 MHz", "Abilita 150 MHz"}
 };
 
 const char* get_translation(TranslationKey key, int lang_idx) {

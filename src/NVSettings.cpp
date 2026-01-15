@@ -54,8 +54,18 @@ void NVSettings::read() {
     if (storage.settings.version != 1) {
         memset(&storage.raw[0], 0, FLASH_SECTOR_SIZE);
         storage.settings.version = 1;
-		storage.settings.language_index = 0; // Default language (EN)
+		storage.settings.language_index = 0;        // Default language (EN)
+		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (UK)
         write();
     }
+    else {
+     // MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
+     // Note: on previously-written v1 settings, 'keyboard_layout_index' didn't exist yet
+     // and may read back as 0xFF from flash. Fix it once and persist.
+     if (storage.settings.keyboard_layout_index == 0xFF) {
+       storage.settings.keyboard_layout_index = 0; // UK by default
+       write();
+     }
+   }
 }
 

@@ -21,7 +21,27 @@
 #ifdef __cplusplus
 #include <stdexcept>
 #include <vector>
+#include <string>
 #include "UserInterface.h"
+
+enum class KeyboardLayout {
+CZ_CZ,
+DE_CH,
+DE_DE,
+DK_DK,
+EN_UK,
+EN_US,
+ES_ES,
+FI_FI,
+FR_CH,
+FR_FR,
+HU_HU,
+IT_IT,
+NL_NL,
+NO_NO,
+PL_PL,
+SE_SE
+};
 
 class HidInputException: public std::runtime_error {
 public:
@@ -36,6 +56,12 @@ public:
     static HidInput& instance();
 
     void set_ui(UserInterface& ui);
+
+	/**
+	* Set keyboard layout from UI index (UserInterface::kLayouts[] order).
+	* This switches the HID->IKBD lookup table immediately.
+	*/
+	void set_layout_from_index(unsigned ui_index);
 
     /**
      * Open the input devices
@@ -54,6 +80,8 @@ public:
     int mouse_buttons() const; 
     unsigned char joystick() const;
     bool mouse_enabled() const;
+	
+	void set_layout(KeyboardLayout);
 
 private:
     bool get_usb_joystick(int addr, uint8_t& axis, uint8_t& button);

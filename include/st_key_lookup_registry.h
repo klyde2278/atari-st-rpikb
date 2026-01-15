@@ -1,6 +1,6 @@
 /*
  * Atari ST RP2040 IKBD Emulator
- * Copyright (C) 2021 Roy Hopkins
+ * Copyright (C) 2025 Emmanuel Barraud
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,28 +17,20 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+
+// st_key_lookup_registry.h
 #pragma once
+#include <cstdint>
+#include "HidInput.h"
 
-extern const char* languages[];
-extern const int NUM_LANGUAGES;
-
-enum TranslationKey {
-    KEY_USB_KEYBOARD,
-    KEY_USB_MOUSE,
-    KEY_USB_JOYSTICK,
-    KEY_MOUSE_ENABLED,
-    KEY_JOY0_ENABLED,
-    KEY_MOUSE_SPEED,
-    KEY_LANGUAGE,
-	KEY_LAYOUT,
-	KEY_HELP,
-    KEY_HELP_TOGGLE_MOUSE,  // "Toggles between USB mouse and Atari mouse"
-    KEY_HELP_RESET,         // "Resets the emulation"
-    KEY_HELP_TOGGLE_JOY1,   // "Switches Joy1 D-sub <-> USB"
-    KEY_HELP_TOGGLE_JOY0,   // "Switches Joy0 D-sub <-> USB"
-    KEY_HELP_SET_270,       // "Set 270MHz"
-    KEY_HELP_SET_150,		// "Set 150MHz"
-    KEY_COUNT // Number of strings. Keep last to count.
+// Each table is a 128-byte lookup: HID usage [0..127] -> Atari ST scancode [0..127] (0 = unmapped)
+struct LookupEntry {
+  KeyboardLayout layout;
+  const uint8_t* table;       // base table: st_key_lookup_hid_<locale>[128]
+  const uint8_t* overlay;     // per-layout overlay: can be nullptr or 128 bytes (0 means "no override")
 };
 
-const char* get_translation(TranslationKey key, int lang_idx);
+const LookupEntry* find_lookup(KeyboardLayout layout);
+
+// Optional helpers to set up or tweak overlays at runtime if needed
+void registry_set_overlay(KeyboardLayout layout, const uint8_t* overlay128);

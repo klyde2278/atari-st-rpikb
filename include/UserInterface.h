@@ -37,7 +37,14 @@ public:
         PAGE_JOY1,
         PAGE_SERIAL,
 		PAGE_LANGUAGE,
-        PAGE_USB_DEBUG
+		PAGE_LAYOUT,
+		PAGE_HELP_1,
+		PAGE_HELP_2,
+		PAGE_CYCLE_MAX, // Last page to be displayed
+
+		
+        PAGE_USB_DEBUG, // Displayed by Ctrl+F8 only
+		PAGE_MAX
     };
 
     void init();
@@ -92,6 +99,25 @@ public:
 	* Update language
 	*/
 	void update_language();
+	
+	/**
+	* Update keyboard layout page
+	*/
+    void update_layout();
+	
+	/**
+	* Update help page 1
+	*/
+    void update_help_1();
+	
+	/**
+	* Update help page 2
+	*/
+    void update_help_2();
+	/**
+	* Show USB debug page
+	*/
+	void show_usb_debug_page();
 
 private:
     void update_serial();
@@ -114,5 +140,7 @@ private:
     absolute_time_t serial_tm;
     uint        btn_gpio[3];
     int         btn_count[3];
+    absolute_time_t splash_tm;
+	bool splash_done = false; 
 };
 

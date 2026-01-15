@@ -39,6 +39,9 @@ struct Settings {
 	
 	// Language index: 0 = EN, 1 = FR, 2 = DE, 3 = SP, 4 = IT
     uint8_t     language_index;
+	
+	// Keyboard layout index (UI selection persisted in NV)
+	uint8_t     keyboard_layout_index;
 };
 
 class NVSettings {

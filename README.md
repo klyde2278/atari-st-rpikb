@@ -97,15 +97,15 @@ The user interface has several pages that are rotated between by pressing the mi
 
 1. Splash screen. Shows the version number
 
-
+   <img src="Splash.jpg" alt="Splash screen" style="width: 300px; height: auto;">
 
 1. USB Status + Mouse speed. Left and right buttons change allow the mouse speed to be altered.
    
-   ![Mouse speed](mouse_EN.jpg)
+   <img src="Status.jpg" alt="Status page" style="width: 300px; height: auto;">
 
-2. USB Status + Joystick 0 assignment. Left and right buttons toggle between USB joystick and DB-9 joystick.
+2. USB Status + Joystick 0 & 1 assignment. Middle button selects Joy 1. Left and right buttons toggle between USB joystick and DB-9 joystick.
    
-   ![Joystick 0](joy2_usb.jpg) &emsp; ![Joystick 0](joy0_dsub.jpg)
+   <img src="Sjoy0_Dsub.jpg" alt="Joystick page" style="width: 300px; height: auto;">
 
 3. USB Status + Joystick 1 assignment. Left and right buttons toggle between USB joystick and DB-9 joystick.
    

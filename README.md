@@ -12,10 +12,6 @@ flowing between the emulator and the Atari ST.
 The emulator supports both USB and Atari ST compatible joysticks, supported a maximum of two joysticks at a time. Using the user interface
 you can select whether the USB joystick or Atari joystick are assigned to Joysticks 0 and 1.
 
-This project is designed to work with the Atari Eiffel Pico USB device offered on my website store: https://klydes-korner.site/
-
-
-
 ## How it works
 The Atari ST keyboard contains an HD6301 microcontroller that can be programmed by the Atari TOS or by user applications to read the keyboard, mouse and joysticks. The keyboard is connected to the Atari via a serial interface. Commands can be sent from the Atari to the keyboard and the keyboard sends mouse movements, keystrokes and joystick states to the Atari.
 
@@ -31,6 +27,11 @@ The emulator is configured as per the schematic below.
 All of the external components except the level shifter are optional - you do not need to include the display and buttons if you are happy to hardcode mouse acceleration and joystick assignment settings in code. Also, if you only plan to use USB joysticks then you can omit the DB-9 connectors.
 
 The level shifter is required as the Atari uses 5V logic over the serial connection whereas the Pico uses 3.3V logic. You can possible get away with leaving UART_RX disconnected and connect UART_TX to the Atari without a level shifter but many games and applications will not work like this as they send commands to the IKBD/emulator.atari_ikbd.uf2
+
+## Buying an Atari Eiffel Pico USB device
+This project is designed to work with the Atari Eiffel Pico USB device sold on my web store: https://klydes-korner.site/produit/adaptateur-atari-eiffel-pico-usb/
+
+![Decription](descriptif_EN.png)
 
 ## Compiling the Emulator Firmware
 
@@ -90,9 +91,13 @@ Once compiled, turn your Pi Pico ON while pressing the BOOTSEL button. Upload th
 If you don't know how or can't build the firmware by yourself, please find the released files here: https://github.com/klyde2278/atari-st-rpikb/releases
 
 ## Using the emulator
-If you build the emulator as per the schematic, the Pico is powered directly from the Atari 5V supply. The Pico boots immediately but USB enumeration can take a few seconds. Once this is complete, the emulator is fully operational.
+If you build the emulator as per the schematic or buy an Atari Eiffel Pico USB device from me, the Pico is powered directly from the Atari 5V supply. The Pico boots immediately but USB enumeration can take a few seconds. Once this is complete, the emulator is fully operational.
 
-The user interface has 4 pages that are rotated between by pressing the middle UI button. The first three pages all show the number of connected USB devices at the top but allow configuration of an option below. The pages in order are:
+The user interface has several pages that are rotated between by pressing the middle UI button. AS for Version V8.0.0 the pages in order are:
+
+1. Splash screen. Shows the version number
+
+
 
 1. USB Status + Mouse speed. Left and right buttons change allow the mouse speed to be altered.
    

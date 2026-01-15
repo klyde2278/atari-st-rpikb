@@ -99,25 +99,27 @@ The user interface has several pages that are rotated between by pressing the mi
 
    <img src="Splash.jpg" alt="Splash screen" style="width: 300px; height: auto;">
 
-1. USB Status + Mouse speed. Left and right buttons change allow the mouse speed to be altered.
+2. USB Status + Mouse speed. Left and right buttons change allow the mouse speed to be altered.
    
    <img src="Status.jpg" alt="Status page" style="width: 300px; height: auto;">
 
-2. USB Status + Joystick 0 & 1 assignment. Middle button selects Joy 1. Left and right buttons toggle between USB joystick and DB-9 joystick.
+3. USB Status + Joystick 0 & Joystick 1 assignment. Middle button selects Joy 1. Left and right buttons toggle between USB joystick and DB-9 joystick.
    
-   <img src="Sjoy0_Dsub.jpg" alt="Joystick page" style="width: 300px; height: auto;">
+   <img src="Joy_Dsub.jpg" alt="Joystick page" style="width: 300px; height: auto;">
 
-3. USB Status + Joystick 1 assignment. Left and right buttons toggle between USB joystick and DB-9 joystick.
-   
-   ![Joystick 1](joy1_usb.jpg) &emsp; ![Joystick 0](joy1_dsub.jpg)
+The real ST keyboard has a single DB-9 socket which is shared between the mouse and Joystick 0. The emulator allows you to have a mouse and joystick plugged in simultaneously but you need to select whether the mouse or joystick 0 is active. This can be toggled by using the Ctrl + F12 shortcut on the keyboard. The current mode is shown on any of the status pages on the OLED display.
+
 
 4. Serial data Tx/Rx between emulator and Atari. Data received from the Atari is on the left, data sent to the Atari is on the right.
    
-   ![Comms](comms.jpg)
+   <img src="Serial.jpg" alt="Serial page" style="width: 300px; height: auto;">
 
 The serial data page should only be used for ensuring the connection works. Displaying the page slows down the emulator and you may seem some mouse lag whilst it is active.
 
-The real ST keyboard has a single DB-9 socket which is shared between the mouse and Joystick 0. The emulator allows you to have a mouse and joystick plugged in simultaneously but you need to select whether the mouse or joystick 0 is active. This can be toggled by pressing the Scroll Lock button on the keyboard. The current mode is shown on any of the status pages on the OLED display.
+5. Language and Keyboard type selection. Middle button selects Keyboard type. Left and right buttons selects the language.
+
+    <img src="Language.jpg" alt="Language page" style="width: 300px; height: auto;">
+
 
 ## Keyboard Shortcuts
 

@@ -120,6 +120,13 @@ The serial data page should only be used for ensuring the connection works. Disp
 
     <img src="Language.jpg" alt="Language page" style="width: 300px; height: auto;">
 
+6. Help page one. Shows the first page of shortcuts for this firmware version.
+
+    <img src="Help 1.jpg" alt="Help page 1" style="width: 300px; height: auto;">
+
+8. Help page two. Shows the second page of shortcuts for this firmware version.
+
+    <img src="Help 2.jpg" alt="Help page 2" style="width: 300px; height: auto;">
 
 ## Keyboard Shortcuts
 

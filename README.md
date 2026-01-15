@@ -31,7 +31,7 @@ The level shifter is required as the Atari uses 5V logic over the serial connect
 ## Buying an Atari Eiffel Pico USB device
 This project is designed to work with the Atari Eiffel Pico USB device sold on my web store: https://klydes-korner.site/produit/adaptateur-atari-eiffel-pico-usb/
 
-<img src="descriptif_EN.png" alt="Atari Eiffel Pico USB" style="width: 100%; height: auto;">
+<img src="descriptif_EN.png" alt="Atari Eiffel Pico USB" style="width: 150%; height: auto;">
 
 ## Compiling the Emulator Firmware
 

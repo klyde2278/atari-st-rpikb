@@ -41,13 +41,28 @@ pico_sdk_init()
 set(SOURCES
     src/main.cpp
     src/HD6301V1ST.cpp
-    src/st_key_lookup_hid_gb.cpp
+    src/st_key_lookup_registry.cpp
+    src/st_key_lookup_hid_cz_cz.cpp
+    src/st_key_lookup_hid_de_ch.cpp
+    src/st_key_lookup_hid_de_de.cpp
+    src/st_key_lookup_hid_dk_dk.cpp
+    src/st_key_lookup_hid_es_es.cpp
+    src/st_key_lookup_hid_fi_fi.cpp
+    src/st_key_lookup_hid_fr_ch.cpp
+    src/st_key_lookup_hid_hu_hu.cpp
+    src/st_key_lookup_hid_it_it.cpp
+    src/st_key_lookup_hid_nl_nl.cpp
+    src/st_key_lookup_hid_no_no.cpp
+    src/st_key_lookup_hid_pl_pl.cpp
+    src/st_key_lookup_hid_se_se.cpp
+    src/st_key_lookup_hid_en_us.cpp
+    src/st_key_lookup_hid_en_uk.cpp
+    src/st_key_lookup_hid_fr_fr.cpp
     src/AtariSTMouse.cpp
     src/SerialPort.cpp
     src/HidInput.cpp
     src/util.cpp
     src/UserInterface.cpp
-#    ${LANG_SRC}  # Specific language source file
     src/UserInterface_i18n.cpp
     src/NVSettings.cpp
     src/hid_app_host.c

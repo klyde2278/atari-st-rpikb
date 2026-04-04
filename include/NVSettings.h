@@ -42,6 +42,9 @@ struct Settings {
 	
 	// Keyboard layout index (UI selection persisted in NV)
 	uint8_t     keyboard_layout_index;
+	
+	// Joystick dead zone value
+	uint8_t joystick_dead_zone;
 };
 
 class NVSettings {

@@ -38,6 +38,10 @@ enum TranslationKey {
     KEY_HELP_TOGGLE_JOY0,   // "Switches Joy0 D-sub <-> USB"
     KEY_HELP_SET_270,       // "Set 270MHz"
     KEY_HELP_SET_150,		// "Set 150MHz"
+	KEY_DEAD_ZONE,			// "Joystick dead zone"
+	KEY_BACK,				// "Back"
+	KEY_SETTINGS,			// "Settings"
+	KEY_DEBUG,				// "Debug"
     KEY_COUNT // Number of strings. Keep last to count.
 };
 

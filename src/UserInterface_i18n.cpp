@@ -9,23 +9,23 @@ static const char* translations[][KEY_COUNT] = {
     // EN
     { "USB Keyboard  ", "USB Mouse     ", "USB Joystick  ", "Mouse enabled", "Joy 0 enabled", "Mouse speed", "Language", "USB Keyboard",
 	  "Help", "USB<->Atari mouse", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
-	  "Set CPU 270 MHz", "Set CPU 150 MHz"},
+	  "Set CPU 270 MHz", "Set CPU 150 MHz", "Joystick dead zone", "Back", "Settings", "Debug"},
     // FR
     { "Clavier USB   ", "Souris USB    ", "Joystick USB  ", "Souris activée", "Joy 0 activé", "Vitesse souris", "Langue", "Clavier USB",
 	  "Aide", "souris USB<->Atari", "Réinitialiser", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
-	  "Activer 270 MHz", "Activer 150 MHz"},
+	  "Activer 270 MHz", "Activer 150 MHz", "Zone morte joy.", "Retour", "Paramètres", "Debogage"},
     // DE
     { "USB-Tastatur  ", "USB-Maus      ", "USB-Joystick  ", "Maus aktiviert", "Joy 0 aktivert", "Maus-geschw.", "Sprache", "USB-Tastatur",
 	  "Hilfe", "Maus USB<->Atari", "Zurücksetzen", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
-	  "CPU 270 MHz", "CPU 150 MHz"},
+	  "CPU 270 MHz", "CPU 150 MHz", "Joystick-Totzone", "Zurück", "Einstellungen", "debuggen"},
     // SP
     { "Teclado USB   ", "Ratón USB     ", "Joystick USB  ", "Ratón habilitado", "Joy 0 habilitado", "Velocidad Ratón", "Idioma", "Teclado USB",
 	  "Ayuda", "ratón USB<->Atari", "Reiniciar", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
-	  "Habilitar 270 MHz", "Habilitar 150 MHz"},
+	  "Habilitar 270 MHz", "Habilitar 150 MHz", "Zona muerta joy.", "Volver", "Ajustes", "Depuración"},
     // IT
     { "Tastiera USB  ", "Mouse USB     ", "Joystick USB  ", "Mouse abilitato", "Joy 0 abilitato", "Velocità mouse", "Lingua", "Tastiera USB",
 	  "Aiuto", "mouse USB<->Atari", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
-	  "Abilita 270 MHz", "Abilita 150 MHz"}
+	  "Abilita 270 MHz", "Abilita 150 MHz", "Zona morta joy.", "Ritorno", "Impostazioni", "Debug"}
 };
 
 const char* get_translation(TranslationKey key, int lang_idx) {

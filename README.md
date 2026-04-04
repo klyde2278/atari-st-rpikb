@@ -97,36 +97,43 @@ The user interface has several pages that are rotated between by pressing the mi
 
 1. Splash screen. Shows the version number
 
-   <img src="Splash.jpg" alt="Splash screen" style="width: 300px; height: auto;">
+   <img src="Splash.png" alt="Splash screen" style="width: 300px; height: auto;">
 
 2. USB Status + Mouse speed. Left and right buttons change allow the mouse speed to be altered.
    
-   <img src="Status.jpg" alt="Status page" style="width: 300px; height: auto;">
+   <img src="Status.png" alt="Status page" style="width: 300px; height: auto;">
 
 3. USB Status + Joystick 0 & Joystick 1 assignment. Middle button selects Joy 1. Left and right buttons toggle between USB joystick and DB-9 joystick.
    
-   <img src="Joy_Dsub.jpg" alt="Joystick page" style="width: 300px; height: auto;">
+   <img src="joy0.png" alt="Joystick page" style="width: 300px; height: auto;">
 
-The real ST keyboard has a single DB-9 socket which is shared between the mouse and Joystick 0. The emulator allows you to have a mouse and joystick plugged in simultaneously but you need to select whether the mouse or joystick 0 is active. This can be toggled by using the Ctrl + F12 shortcut on the keyboard. The current mode is shown on any of the status pages on the OLED display.
+The real ST keyboard has a single DB-9 socket which is shared between the mouse and Joystick 0. The emulator allows you to have a USB mouse and a DB-9 joystick plugged in simultaneously but you need to select whether the USB mouse or the DB-9 joystick is active. This can be toggled by using the Ctrl + F12 shortcut on the keyboard any time.
 
+4. The different pages can be accessed through different menus.
 
-4. Serial data Tx/Rx between emulator and Atari. Data received from the Atari is on the left, data sent to the Atari is on the right.
-   
-   <img src="Serial.jpg" alt="Serial page" style="width: 300px; height: auto;">
+   <img src="menu1.png" alt="Menu" style="width: 300px; height: auto;">
 
-The serial data page should only be used for ensuring the connection works. Displaying the page slows down the emulator and you may seem some mouse lag whilst it is active.
+6. Language selection page. Available languages are: English, French, German, Spanish, Italian.
 
-5. Language and Keyboard type selection. Middle button selects Keyboard type. Left and right buttons selects the language.
+    <img src="language.png" alt="Language page" style="width: 300px; height: auto;">
 
-    <img src="Language.jpg" alt="Language page" style="width: 300px; height: auto;">
+8. USB Joystick dead zone settings page. The joystick dead zone can be tested.
+
+   <img src="deadzone.png" alt="Dead zone" style="width: 300px; height: auto;">
 
 6. Help page one. Shows the first page of shortcuts for this firmware version.
 
-    <img src="Help 1.jpg" alt="Help page 1" style="width: 300px; height: auto;">
+    <img src="Help1.png" alt="Help page 1" style="width: 300px; height: auto;">
 
-8. Help page two. Shows the second page of shortcuts for this firmware version.
+7. Help page two. Shows the second page of shortcuts for this firmware version.
 
-    <img src="Help 2.jpg" alt="Help page 2" style="width: 300px; height: auto;">
+    <img src="help2.png" alt="Help page 2" style="width: 300px; height: auto;">
+
+8. Serial data Tx/Rx between emulator and Atari. Data received from the Atari is on the left, data sent to the Atari is on the right.
+   
+   <img src="Debug1.png" alt="Serial page" style="width: 300px; height: auto;">
+
+The serial data page should only be used for ensuring the connection works. Displaying the page slows down the emulator and you may seem some mouse lag whilst it is active.
 
 ## Keyboard Shortcuts
 
@@ -138,11 +145,8 @@ The emulator supports several keyboard shortcuts for convenient control:
 | **Ctrl+F11** | XRESET | Triggers HD6301 hardware reset (like power cycling the IKBD) |
 | **Ctrl+F10** | Toggle Joystick 1 | Switches Joystick 1 between D-SUB and USB |
 | **Ctrl+F9** | Toggle Joystick 0 | Switches Joystick 0 between D-SUB and USB |
-| **Alt+/** | INSERT Key | Sends Atari ST INSERT key (useful for modern keyboards) |
-| **Alt+[** | Keypad /** | Sends Atari ST keypad divide key |
-| **Alt+]** | Keypad *** | Sends Atari ST keypad multiply key |
-| **Alt+Keypad Plus** | Set 270MHz | Overclocks RP2040 to 270MHz for maximum performance |
-| **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 to 150MHz for stability |
+| **Alt+Keypad Plus** | Set 270MHz | Overclocks RP2040 CPU to 270MHz for maximum performance |
+| **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 CPU to 150MHz for stability |
 
 For detailed information about keyboard shortcuts, see [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).
 

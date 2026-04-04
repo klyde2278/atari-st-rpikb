@@ -55,7 +55,8 @@ void NVSettings::read() {
         memset(&storage.raw[0], 0, FLASH_SECTOR_SIZE);
         storage.settings.version = 1;
 		storage.settings.language_index = 0;        // Default language (EN)
-		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (UK)
+		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (CZ)
+        storage.settings.joystick_dead_zone = 0x08; // Default 0x08
         write();
     }
     else {
@@ -63,9 +64,15 @@ void NVSettings::read() {
      // Note: on previously-written v1 settings, 'keyboard_layout_index' didn't exist yet
      // and may read back as 0xFF from flash. Fix it once and persist.
      if (storage.settings.keyboard_layout_index == 0xFF) {
-       storage.settings.keyboard_layout_index = 0; // UK by default
+       storage.settings.keyboard_layout_index = 0; // CZ by default
        write();
      }
+	// MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
+	if (storage.settings.joystick_dead_zone == 0xFF) {
+		storage.settings.joystick_dead_zone = 0x08; // 0x08
+		write();
+	}
+
    }
 }
 

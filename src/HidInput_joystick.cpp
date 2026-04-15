@@ -244,13 +244,9 @@ void HidInput::handle_joystick()
                 axis |= gpio_get(JOY1_RIGHT) ? 0 : 8;
                 joystick_state = (joystick_state & ~0xF0) | (axis << 4);
                 // bit 0 = Joy1 fire = right mouse button on Atari ST.
-                // When the USB mouse is enabled, handle_mouse() owns bit 0
-                // (USB right-click). Do NOT overwrite it from the D-Sub GPIO
-                // or the right button will be constantly cleared between polls.
-                // Only take the D-Sub fire when the mouse is disabled.
-                if (!ui_->get_mouse_enabled()) {
-                    mouse_state = (mouse_state & 0xFE) | (gpio_get(JOY1_FIRE) ? 0 : 1);
-                }
+                // Always write bit 0 regardless of mouse_enabled, mirroring the USB path:
+                // on the Atari ST, Joy1 fire and the right mouse button are the same signal.
+                mouse_state = (mouse_state & 0xFE) | (gpio_get(JOY1_FIRE) ? 0 : 1);
             }
             else {
                 // Joy0 D-Sub only active when the mouse is not using Joy0 port.

@@ -23,8 +23,26 @@
 #include <string>
 #include <deque>
 
-#define MOUSE_MIN -7
-#define MOUSE_MAX 8
+// Slider bar length in characters (must match the string literal in
+// update_mouse / update_deadzone). Used as the upper bound for the cursor.
+#define MOUSE_SLIDER_LEN   15   // "===============" between 0x80 and 0x82
+#define MOUSE_MIN     -7
+#define MOUSE_MAX      8
+#define JOY_DZ_MIN     0
+#define JOY_DZ_MAX    15
+#define JOY_DZ_DEFAULT 8
+
+// Custom cursor glyph redefined in the font at address 0x88.
+// Used in front of the currently selected item on any menu or list page.
+#define UI_CURSOR_GLYPH  ((char)0x88)
+
+// Number of entries in each menu (must stay in sync with the string arrays
+// defined in update_menu1 / update_menu2).
+#define MENU1_COUNT  4   // Back | Settings | Help | Debug
+#define MENU2_COUNT  4   // Back | Language | Kbd Layout | Deadzone
+
+// Vertical spacing (pixels) between menu entries on MENU_1 / MENU_2.
+#define MENU_LINE_H  14
 
 class UserInterface {
 public:
@@ -53,6 +71,7 @@ public:
         PAGE_HELP_2,
 
         // Debug pages (reached from PAGE_MENU_1)
+        PAGE_MOUSE_DEBUG,
         PAGE_SERIAL,
         PAGE_USB_DEBUG,
 
@@ -137,11 +156,20 @@ public:
      */
     void show_usb_debug_page();
 
+    /**
+     * Accumulate mouse delta for the mouse debug page.
+     * Called from handle_mouse() on every HID poll cycle.
+     * Non-zero values are OR-latched so a fast movement is not missed between
+     * two render frames.
+     */
+    void set_mouse_debug_delta(int dx, int dy);
+
 private:
     void update_serial();
     void update_status();
     void update_mouse();
     void update_deadzone();
+    void update_mouse_debug();
     // index = 0 or 1 ; selected = currently highlighted joystick on PAGE_JOY
     void update_joy(int index, int selected);
     void update_usb_debug();
@@ -173,4 +201,9 @@ private:
     int         menu1_selected = 0;
     // Currently highlighted entry on PAGE_MENU_2 (0 = Back, 1 = Language, 2 = Kbd Layout, 3 = Deadzone)
     int         menu2_selected = 0;
+
+    // Mouse movement delta accumulated between two render frames (PAGE_MOUSE_DEBUG).
+    // Set by set_mouse_debug_delta(), cleared after each call to update_mouse_debug().
+    int         mouse_debug_dx = 0;
+    int         mouse_debug_dy = 0;
 };

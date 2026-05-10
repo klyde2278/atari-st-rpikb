@@ -88,10 +88,20 @@ public:
     void reset();
 
     // --- State accessors ---
+// --- State accessors ---
     unsigned char keydown(const unsigned char code) const;
-    int           mouse_buttons() const;
+    int           mouse_buttons() const;          // Atari-side button state (mouse_state)
+    int           usb_mouse_buttons_raw() const   // Raw USB HID button state (bit1=L, bit0=R)
+                      { return usb_mouse_buttons; }
     unsigned char joystick() const;
     bool          mouse_enabled() const;
+
+    /**
+     * Return the short display label for the last pressed USB key.
+     * Empty string when no key is held. Updated by handle_keyboard().
+     * Used by UserInterface::update_mouse_debug() to draw the key widget.
+     */
+    const char* get_last_key_label() const { return last_key_label; }
 
 private:
     bool get_usb_joystick(int addr, uint8_t& axis, uint8_t& button);
@@ -99,14 +109,21 @@ private:
     bool get_ps4_joystick(int joystick_num, uint8_t& axis, uint8_t& button);
 
 private:
-    int keyboard_handle  = -1;
-    int mouse_handle     = -1;
-    int joystick_handle  = -1;
     std::vector<unsigned char> key_states;
-    int           mouse_state         = 0;
-    unsigned char joystick_state      = 0;
-    int           mouse_overlay_fire  = 0;
-    bool          mouse_en            = true;
+    int            keyboard_handle    =-1;
+    int            mouse_handle       =-1;
+    int            joystick_handle    =-1;
+    int            mouse_state        = 0;
+    int            usb_mouse_buttons  = 0;  // last known USB mouse button state (persists between reports)
+    uint8_t        usb_joy_fire       = 0;  // last known USB joystick fire state: bit0=Joy1, bit1=Joy0
+	unsigned char  joystick_state     = 0;
+    int            mouse_overlay_fire = 0;
+    bool           mouse_en           = true;
+
+    // Short label (≤ 7 chars + NUL) of the last pressed key.
+    // Cleared to "" when no key is held. Written by handle_keyboard(),
+    // read by UserInterface::update_mouse_debug() via get_last_key_label().
+    char last_key_label[8] = {};
 };
 
 // ---------------------------------------------------------------------------

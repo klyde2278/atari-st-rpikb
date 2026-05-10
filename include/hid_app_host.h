@@ -38,26 +38,34 @@ HID_TYPE tuh_hid_get_type(uint8_t dev_addr);
 bool tuh_hid_is_busy(uint8_t dev_addr);
 
 // Queue a buffer to receive the next report (legacy API wrapper)
-// Renamed from tuh_hid_get_report to avoid collision with TinyUSB 0.19+ API
 bool hid_app_request_report(uint8_t dev_addr, void * p_report);
 
 // Get the size of the HID report in bytes
 uint16_t tuh_hid_get_report_size(uint8_t dev_addr);
 
-// Get the report info structure used for parsing a report
+// Get the report info structure used for parsing a report.
+// Returns NULL if the device does not exist or its descriptor was not parsed.
 HID_ReportInfo_t* tuh_hid_get_report_info(uint8_t dev_addr);
 
 // Application callbacks
 void tuh_hid_mounted_cb(uint8_t dev_addr);
 void tuh_hid_unmounted_cb(uint8_t dev_addr);
 
-// Debug functions
+// Debug counters
 uint32_t hid_debug_get_mount_calls(void);
 uint32_t hid_debug_get_report_calls(void);
 uint32_t hid_debug_get_report_copied(void);
 uint32_t hid_debug_get_unmount_calls(void);
 uint32_t hid_debug_get_active_devices(void);
 uint32_t hid_debug_get_last_addr_inst(void);  // Returns (addr << 8) | instance
+
+// Last mounted device descriptor length and detected type.
+// Useful for diagnosing receivers with large descriptors (e.g. Logitech Unifying).
+uint16_t hid_debug_get_last_desc_len(void);
+HID_TYPE hid_debug_get_last_hid_type(void);
+
+// Returns the HID instance number for the given device address.
+uint8_t tuh_hid_get_instance(uint8_t dev_addr);
 
 #ifdef __cplusplus
 }

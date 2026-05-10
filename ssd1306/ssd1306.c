@@ -30,6 +30,7 @@ SOFTWARE.
 #include <stdio.h>
 
 #include "ssd1306.h"
+#include "ssd1306_key.h"
 #include "font.h"
 
 inline static void fancy_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, char *name) {
@@ -165,7 +166,7 @@ void ssd1306_draw_square(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t width, u
 
 }
 
-void ssd13606_draw_empty_square(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t width, uint32_t height){
+void ssd1306_draw_empty_square(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t width, uint32_t height){
 	ssd1306_draw_line(p, x, y, x+width, y);
 	ssd1306_draw_line(p, x, y+height, x+width, y+height);
 	ssd1306_draw_line(p, x, y, x, y+height);

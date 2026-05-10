@@ -102,13 +102,12 @@ void core1_entry()
     }
 }
 
-// ---------------------------------------------------------------------------
-// Main — core 0: USB host, HID, mouse, joystick, UI.
-// ---------------------------------------------------------------------------
 int main()
 {
     // TinyUSB must be initialised before any other peripheral setup.
-    if (!tusb_init()) {
+    // tusb_init() with no args is deprecated since TinyUSB 0.18.
+    // Use tuh_init() directly for host-only mode on native USB port (rhport 0).
+    if (!tuh_init(0)) {
         watchdog_reboot(0, 0, 0);
     }
 

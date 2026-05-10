@@ -209,12 +209,10 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
             ++mouse_count;
         }
     }
-    else if (tp == HID_JOYSTICK) {
+else if (tp == HID_JOYSTICK) {
         device[actual_addr] = new uint8_t[tuh_hid_get_report_size(actual_addr)];
         hid_app_request_report(actual_addr, device[actual_addr]);
-
-		// The joystick is assigned and remains attached to Joy1 (first) or Joy0 (second)
-		hid_joystick_assign_slot(actual_addr);
+        hid_joystick_assign_slot(actual_addr);   // assign to joy1 or joy0
         ++joy_count;
     }
 
@@ -228,8 +226,8 @@ void tuh_hid_unmounted_cb(uint8_t dev_addr) {
     if      (tp == HID_KEYBOARD) --kb_count;
     else if (tp == HID_MOUSE)    --mouse_count;
     else if (tp == HID_JOYSTICK) {
-        --joy_count;
         hid_joystick_release_slot(dev_addr);
+		--joy_count;
     }
     auto it = device.find(dev_addr);
     if (it != device.end()) {

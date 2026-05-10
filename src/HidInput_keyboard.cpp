@@ -114,13 +114,117 @@ static void one_shot(bool condition, bool& last_state, Fn&& action)
 }
 
 // ---------------------------------------------------------------------------
-// handle_keyboard() — main keyboard processing loop.
+// hid_keycode_to_label
+// Returns a short display label (≤ 3 chars + NUL) for a USB HID keycode.
+// Labels follow the standard HID Usage Table (QWERTY convention) and are
+// independent of the active keyboard layout.  They identify the physical key
+// position rather than the character it produces under a given layout.
+//
+// A static single-char buffer is used for letter and digit keys; all other
+// labels are string literals.  The function is only called from the main
+// loop (not from an IRQ), so the static buffer is safe on RP2040.
 // ---------------------------------------------------------------------------
+static const char* hid_keycode_to_label(uint8_t hk) {
+    // Letters A–Z: HID 0x04–0x1D in QWERTY order.
+    static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    static char single[2] = {0, 0};
+
+    if (hk >= 0x04 && hk <= 0x1D) {
+        single[0] = letters[hk - 0x04];
+        return single;
+    }
+    // Digits 1–9.
+    if (hk >= 0x1E && hk <= 0x26) {
+        single[0] = (char)('1' + (hk - 0x1E));
+        return single;
+    }
+
+    switch (hk) {
+        case 0x27: return "0";
+        case 0x28: return "Ent";
+        case 0x29: return "Esc";
+        case 0x2A: return "Bs";
+        case 0x2B: return "Tab";
+        case 0x2C: return "Sp";
+        // Punctuation — show the unshifted character where unambiguous.
+        case 0x2D: return "-";
+        case 0x2E: return "=";
+        case 0x2F: return "[";
+        case 0x30: return "]";
+        case 0x31: return "\\";
+        case 0x32: return "#";
+        case 0x33: return ";";
+        case 0x34: return "'";
+        case 0x35: return "`";
+        case 0x36: return ",";
+        case 0x37: return ".";
+        case 0x38: return "/";
+        case 0x39: return "Cap";
+        // Function keys.
+        case 0x3A: return "F1";
+        case 0x3B: return "F2";
+        case 0x3C: return "F3";
+        case 0x3D: return "F4";
+        case 0x3E: return "F5";
+        case 0x3F: return "F6";
+        case 0x40: return "F7";
+        case 0x41: return "F8";
+        case 0x42: return "F9";
+        case 0x43: return "F10";
+        case 0x44: return "F11";
+        case 0x45: return "F12";
+        // Navigation cluster.
+        case 0x46: return "Prt";
+        case 0x47: return "Scr";
+        case 0x48: return "Pau";
+        case 0x49: return "Ins";
+        case 0x4A: return "Hm";
+        case 0x4B: return "PU";
+        case 0x4C: return "Del";
+        case 0x4D: return "End";
+        case 0x4E: return "PD";
+        // Arrow keys: reuse the custom display glyphs already in the font.
+        case 0x4F: return "\x86"; // right
+        case 0x50: return "\x85"; // left
+        case 0x51: return "\x84"; // down
+        case 0x52: return "\x83"; // up
+        // Keypad.
+        case 0x53: return "NL";
+        case 0x54: return "K/";
+        case 0x55: return "K*";
+        case 0x56: return "K-";
+        case 0x57: return "K+";
+        case 0x58: return "KE";
+        case 0x59: return "K1";
+        case 0x5A: return "K2";
+        case 0x5B: return "K3";
+        case 0x5C: return "K4";
+        case 0x5D: return "K5";
+        case 0x5E: return "K6";
+        case 0x5F: return "K7";
+        case 0x60: return "K8";
+        case 0x61: return "K9";
+        case 0x62: return "K0";
+        case 0x63: return "K.";
+        default:   return "?";
+    }
+}
+
+
 void HidInput::handle_keyboard()
 {
+    bool any_polled    = false;
+    bool any_key_found = false;
+
+    // Tracks the last LED state successfully sent to avoid redundant SET_REPORT
+    // calls. Initialised to 0xFF so the first call always triggers a send.
+    static uint8_t last_sent_led = 0xFF;
+
     for (auto& it : device) {
         if (tuh_hid_get_type(it.first) != HID_KEYBOARD) continue;
         if (!tuh_hid_is_mounted(it.first) || tuh_hid_is_busy(it.first)) continue;
+
+        any_polled = true;
 
         auto* kb = reinterpret_cast<hid_keyboard_report_t*>(it.second);
         const bool ctrl_down = ctrl_held(kb);
@@ -181,7 +285,7 @@ void HidInput::handle_keyboard()
             });
         }
 
-        // --- Caps Lock: toggle state and send a single pulse to the Atari ---
+        // --- Caps Lock ---
         static bool last_capslock_hw  = false;
         static bool capslock_on       = false;
         static bool capslock_pulse    = false;
@@ -191,14 +295,7 @@ void HidInput::handle_keyboard()
                 capslock_on      = !capslock_on;
                 capslock_pulse   = true;
                 last_capslock_hw = true;
-                // Reflect Caps Lock state in the keyboard LED (bit 1), keep NumLock (bit 0).
                 current_led_state = (capslock_on ? 0x02 : 0x00) | 0x01;
-                bool sent = false;
-                for (uint8_t idx = 0; idx < 3 && !sent; idx++) {
-                    sent = tuh_hid_set_report(it.first, idx, 0,
-                        HID_REPORT_TYPE_OUTPUT, &current_led_state,
-                        sizeof(current_led_state));
-                }
             } else if (!pressed) {
                 last_capslock_hw = false;
                 capslock_pulse   = false;
@@ -206,9 +303,7 @@ void HidInput::handle_keyboard()
         }
 
         // -----------------------------------------------------------------------
-        // Translate USB HID keycodes to Atari ST scancodes via the active layout
-        // lookup table. System shortcuts that have already been handled above are
-        // suppressed here so they do not reach the Atari.
+        // Translate USB HID keycodes to Atari ST scancodes.
         // -----------------------------------------------------------------------
         uint8_t st_keys[6] = {};
 
@@ -218,14 +313,10 @@ void HidInput::handle_keyboard()
                 st_keys[i] = 0;
                 continue;
             }
-
-            // Suppress Alt+Keypad+/- (clock speed shortcuts).
             if (alt_down && (hk == KEY_KP_ADD || hk == KEY_KP_SUBTRACT)) {
                 st_keys[i] = 0;
                 continue;
             }
-
-            // Suppress Ctrl+F9/F10/F11/F12 (system shortcuts).
             if (ctrl_down && (hk == KEY_TOGGLE_MOUSE ||
                               hk == KEY_XRESET       ||
                               hk == KEY_JOY0_TOGGLE  ||
@@ -233,17 +324,14 @@ void HidInput::handle_keyboard()
                 st_keys[i] = 0;
                 continue;
             }
-
-            // Normal key: look up the Atari ST scancode for the active layout.
             st_keys[i] = s_current_lookup[hk];
         }
 
         // -----------------------------------------------------------------------
-        // Update key_states[] from the translated scancodes.
+        // Update key_states[].
         // -----------------------------------------------------------------------
         for (size_t i = 1; i < key_states.size(); ++i) {
             if (static_cast<int>(i) == ATARI_CAPSLOCK) {
-                // Caps Lock is driven by the single-pulse flag, not the key state.
                 key_states[i] = capslock_pulse ? 1 : 0;
                 continue;
             }
@@ -257,19 +345,40 @@ void HidInput::handle_keyboard()
             key_states[i] = down ? 1 : 0;
         }
 
-        // Modifier keys are sourced directly from the HID modifier byte.
         key_states[ATARI_LSHIFT] = (kb->modifier & MOD_LSHIFT) ? 1 : 0;
         key_states[ATARI_RSHIFT] = (kb->modifier & MOD_RSHIFT) ? 1 : 0;
         key_states[ATARI_CTRL]   = ctrl_down ? 1 : 0;
         key_states[ATARI_ALT]    = alt_down  ? 1 : 0;
 
-        // Keep the NumLock LED active after each report cycle.
-        for (uint8_t idx = 0; idx < 3; idx++) {
-            tuh_hid_set_report(it.first, idx, 0,
-                HID_REPORT_TYPE_OUTPUT, &current_led_state,
-                sizeof(current_led_state));
+        // Send LED update only when the state has actually changed.
+        // Using the device's real instance avoids invalid SET_REPORT calls
+        // and prevents flooding the control pipe at 100 Hz.
+        if (current_led_state != last_sent_led) {
+            uint8_t instance = tuh_hid_get_instance((uint8_t)it.first);
+            if (tuh_hid_set_report((uint8_t)it.first, instance, 0,
+                    HID_REPORT_TYPE_OUTPUT,
+                    &current_led_state, sizeof(current_led_state))) {
+                last_sent_led = current_led_state;
+            }
+        }
+
+        // Update the debug key label.
+        for (int i = 0; i < 6; ++i) {
+            if (kb->keycode[i] != 0) {
+                any_key_found = true;
+                if (last_key_label[0] == '\0') {
+                    const char* lbl = hid_keycode_to_label(kb->keycode[i]);
+                    strncpy(last_key_label, lbl, sizeof(last_key_label) - 1);
+                    last_key_label[sizeof(last_key_label) - 1] = '\0';
+                }
+                break;
+            }
         }
 
         hid_app_request_report(it.first, it.second);
+    }
+
+    if (any_polled && !any_key_found) {
+        last_key_label[0] = '\0';
     }
 }

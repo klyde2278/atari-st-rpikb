@@ -25,26 +25,27 @@
 #include "config.h"
 #include "hardware/clocks.h"
 #include "HidInput.h"
+#include "ssd1306_key.h"
 
 #define DEBOUNCE_COUNT 10
 
-#define JOY_DZ_MIN      0x00
-#define JOY_DZ_MAX      0x10
-#define JOY_DZ_DEFAULT  0x08
-
-// ---------------------------------------------------------------------------
-// Deadzone periodic timer — fires every 50 ms to request a joystick HID poll
-// and a UI redraw while the deadzone page is active.
+// ---------------------------------------------------------------------------------------------------
+// Deadzone and mouse debug periodic timer — fires every 50 ms to request a joystick or mouse HID poll
+// and a UI redraw while the deadzone page or mouse debug page is active.
 // Written from an IRQ context; read from the main loop. volatile is sufficient
 // on the RP2040 Cortex-M0+ (no hardware reordering on a single core).
-// ---------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
 static repeating_timer_t dz_timer;
-static volatile bool dz_poll_needed      = false;
-static volatile bool dz_dirty_requested  = false;
+static volatile bool dz_poll_needed            = false;
+static volatile bool dz_dirty_requested        = false;
+static volatile bool mouse_dbg_poll_needed     = false;
+static volatile bool mouse_dbg_dirty_requested = false;
 
 static bool deadzone_timer_cb(repeating_timer_t* rt) {
-    dz_poll_needed     = true;
-    dz_dirty_requested = true;
+    dz_poll_needed            = true;
+    dz_dirty_requested        = true;
+    mouse_dbg_poll_needed     = true;
+    mouse_dbg_dirty_requested = true;
     return true; // keep repeating
 }
 
@@ -73,23 +74,6 @@ static const char* kLayouts[] = {
     "SE-SE",
 };
 static const int NUM_LAYOUTS = sizeof(kLayouts) / sizeof(kLayouts[0]);
-
-// Slider bar length in characters (must match the string literal in
-// update_mouse / update_deadzone). Used as the upper bound for the cursor.
-#define MOUSE_SLIDER_LEN   14   // "==============" between 0x80 and 0x82
-#define DZ_SLIDER_LEN      15   // "===============" between 0x80 and 0x82
-
-// Custom cursor glyph redefined in the font at address 0x88.
-// Used in front of the currently selected item on any menu or list page.
-#define UI_CURSOR_GLYPH  ((char)0x88)
-
-// Number of entries in each menu (must stay in sync with the string arrays
-// defined in update_menu1 / update_menu2).
-#define MENU1_COUNT  4   // Back | Settings | Help | Debug
-#define MENU2_COUNT  4   // Back | Language | Kbd Layout | Deadzone
-
-// Vertical spacing (pixels) between menu entries on MENU_1 / MENU_2.
-#define MENU_LINE_H  14
 
 enum BUTTONS {
     BUTTON_LEFT,
@@ -159,7 +143,7 @@ void UserInterface::init() {
     splash_tm  = get_absolute_time();
     splash_done = false;
 
-    // Start the 50 ms periodic timer used to refresh the deadzone page.
+    // Start the 50 ms periodic timer used to refresh the deadzone and mouse debug page.
     add_repeating_timer_ms(50, deadzone_timer_cb, this, &dz_timer);
 
     dirty = true;
@@ -240,8 +224,8 @@ void UserInterface::update_mouse() {
     ssd1306_draw_utf8_string(&disp, 0, 45, 1, get_translation(KEY_MOUSE_SPEED, lang_idx));
     sprintf(buf, "\x80==============\x82"); // 0x80=left-end, 0x82=right-end, 0x81=cursor
     int cursor = settings.get_settings().mouse_speed - MOUSE_MIN;
-    if (cursor < 0)                cursor = 0;
-    if (cursor > MOUSE_SLIDER_LEN) cursor = MOUSE_SLIDER_LEN;
+    if (cursor < 0)                 cursor = 0;
+    if (cursor >= MOUSE_SLIDER_LEN) cursor = MOUSE_SLIDER_LEN;
     buf[cursor] = (char)0x81;
     ssd1306_draw_string(&disp, 0, 54, 1, buf);
 }
@@ -312,10 +296,10 @@ void UserInterface::update_menu2() {
 
 void UserInterface::update_splash() {
     ssd1306_clear(&disp);
-    ssd1306_draw_string(&disp, 34,  0, 2, (char*)"EIFFEL");
-    ssd1306_draw_string(&disp, 37, 25, 1, (char*)"Pico - USB");
-    ssd1306_draw_string(&disp, 44, 36, 1, (char*)"Adapter");
-    ssd1306_draw_string(&disp, 47, 55, 1, (char*)"v" PROJECT_VERSION_STRING);
+    ssd1306_draw_string(&disp, 29,  0, 2, (char*)"EIFFEL");
+    ssd1306_draw_string(&disp, 30, 25, 1, (char*)"Pico - USB");
+    ssd1306_draw_string(&disp, 40, 36, 1, (char*)"Adapter");
+    ssd1306_draw_string(&disp, 44, 55, 1, (char*)"v" PROJECT_VERSION_STRING);
 }
 
 void UserInterface::show_usb_debug_page() {
@@ -324,34 +308,40 @@ void UserInterface::show_usb_debug_page() {
 }
 
 void UserInterface::update_usb_debug() {
-    // Resolve current layout name (guard against out-of-range index).
-    const uint8_t idx    = settings.get_settings().keyboard_layout_index;
-    const char*   layout = kLayouts[idx % NUM_LAYOUTS];
-
     char buf[32];
     ssd1306_clear(&disp);
 
-    sprintf(buf, "Keyb:%d Mouse:%d Joy:%d", num_kb, num_mouse, num_joy);
+    sprintf(buf, "Kb:%d Ms:%d Joy:%d", num_kb, num_mouse, num_joy);
     ssd1306_draw_string(&disp, 0,  0, 1, buf);
 
     uint32_t addr_inst = hid_debug_get_last_addr_inst();
-    sprintf(buf, "Mounts:%lu Active:%lu",
+    sprintf(buf, "Mounts:%lu Act:%lu",
         hid_debug_get_mount_calls(),
         hid_debug_get_active_devices());
     ssd1306_draw_string(&disp, 0, 10, 1, buf);
 
-    sprintf(buf, "Last: Ad:%d Inst:%d",
+    sprintf(buf, "Last: Ad:%d In:%d",
         (addr_inst >> 8) & 0xFF,
         addr_inst & 0xFF);
     ssd1306_draw_string(&disp, 0, 20, 1, buf);
 
-    sprintf(buf, "Reports Rx:%lu", hid_debug_get_report_calls());
+    sprintf(buf, "Rx:%lu Cp:%lu",
+        hid_debug_get_report_calls(),
+        hid_debug_get_report_copied());
     ssd1306_draw_string(&disp, 0, 30, 1, buf);
 
-    sprintf(buf, "Reports Copy:%lu", hid_debug_get_report_copied());
+    // Last descriptor length and detected device type.
+    // Helps diagnose receivers whose descriptor exceeds the parsing limit
+    // (e.g. Logitech Unifying, which can exceed 512 bytes).
+    uint16_t  dlen = hid_debug_get_last_desc_len();
+    HID_TYPE  dtype = hid_debug_get_last_hid_type();
+    const char* type_str = (dtype == HID_KEYBOARD) ? "KB"    :
+                           (dtype == HID_MOUSE)     ? "MOUSE" :
+                           (dtype == HID_JOYSTICK)  ? "JOY"   : "UNKN";
+    sprintf(buf, "Desc:%u %s", (unsigned)dlen, type_str);
     ssd1306_draw_string(&disp, 0, 40, 1, buf);
 
-    sprintf(buf, "Layout: %s (%u)", layout, (unsigned)idx);
+    sprintf(buf, "Unmounts:%lu", hid_debug_get_unmount_calls());
     ssd1306_draw_string(&disp, 0, 50, 1, buf);
 }
 
@@ -409,12 +399,12 @@ void UserInterface::update_deadzone() {
         ssd1306_draw_utf8_string(&disp, 0, 20, 2, dz_str);
     }
 
-    // FIX (bug 2): clamp cursor so it never overwrites the 0x82 end-marker
+    // Clamp cursor so it never overwrites the 0x82 end-marker
     // when the dead zone is at maximum.
-    sprintf(buf, "\x80===============\x82"); // 0x80=left-end, 0x82=right-end, 0x81=cursor
+    sprintf(buf, "\x80==============\x82"); // 0x80=left-end, 0x82=right-end, 0x81=cursor
     int cursor = (int)settings.get_settings().joystick_dead_zone - JOY_DZ_MIN;
     if (cursor < 0)                  cursor = 0;
-    if (cursor > DZ_SLIDER_LEN - 1)  cursor = DZ_SLIDER_LEN - 1;
+    if (cursor >= JOY_DZ_MAX)  cursor = JOY_DZ_MAX;
     buf[cursor] = (char)0x81;
     ssd1306_draw_string(&disp, 0, 54, 1, buf);
 
@@ -447,15 +437,82 @@ void UserInterface::update_deadzone() {
     glyph[0] = (axis & 0x02) ? (char)0x84 : ' '; // DOWN
     ssd1306_draw_string(&disp, x_center,      y_bot, 2, glyph);
 
-    glyph[0] = fire ? (char)0x87 : ' ';           // FIRE
+    glyph[0] = fire ? (char)0x87 : ' ';          // FIRE
     ssd1306_draw_string(&disp, x_center,      y_mid, 2, glyph);
 }
 
 // ---------------------------------------------------------------------------
-// handle_buttons
-// Polls the three hardware buttons with a simple debounce counter.
-// on_button_down() is called exactly once per press event.
+// update_mouse_debug
+// Screen layout (128 x 64):
+//
+//   [0..62]  Left half  — two header lines, then USB key cap (ssd1306_draw_key).
+//            KEY_SIZE = 30 px; centered in the 63 px left area: x = 16, y = 20.
+//            Drawn only while a key is held; cleared by ssd1306_clear otherwise.
+//
+//   [63]     1-px vertical separator.
+//
+//   [64..127] Right half — mouse movement arrows (custom glyphs, scale 2)
+//             and L / R button indicators (scale 2, bottom row, latched for
+//             at least BTN_HOLD_FRAMES × 50 ms to absorb HID polling gaps).
+//
+// mouse_debug_dx/dy are cleared after each frame so arrows flash on movement
+// impulse; button indicators latch until the button is confirmed released.
 // ---------------------------------------------------------------------------
+void UserInterface::update_mouse_debug() {
+    ssd1306_clear(&disp);
+
+    // --- Header lines --------------------------------------------------------
+    ssd1306_draw_string(&disp,  0,  0, 1, (char*)"Kb test");
+    ssd1306_draw_string(&disp,  0, 10, 1, (char*)"(en-US)");
+    ssd1306_draw_string(&disp, 68,  0, 1, (char*)"Mse test");
+
+    // --- Left half: pressed USB key cap --------------------------------------
+    // Label is supplied by HidInput::handle_keyboard() via last_key_label.
+    // Empty string means no key is currently held.
+    // KEY_SIZE = 30; centered in 63 px left area: x = (63-30)/2 = 16.
+    // y = 20: leaves a clean gap after the two header lines (rows 0-17).
+    const char* label = HidInput::instance().get_last_key_label();
+    if (label && label[0] != '\0') {
+        ssd1306_draw_key(&disp, 16, 24, label);
+    }
+
+    // --- Vertical separator --------------------------------------------------
+    ssd1306_draw_square(&disp, 63, 0, 1, 64);
+
+    // --- Right half: mouse direction arrows ----------------------------------
+    // Custom glyphs: 0x83=up  0x84=down  0x85=left  0x86=right  (scale 2)
+    const int xc = 90;
+    const int yt = 10, ym = 26, yb = 42;
+    char g[2] = {0, 0};
+
+    g[0] = (mouse_debug_dy < 0) ? (char)0x83 : ' '; // up
+    ssd1306_draw_string(&disp, xc,      yt, 2, g);
+
+    g[0] = (mouse_debug_dx < 0) ? (char)0x85 : ' '; // left
+    ssd1306_draw_string(&disp, xc - 16, ym, 2, g);
+
+    g[0] = (mouse_debug_dx > 0) ? (char)0x86 : ' '; // right
+    ssd1306_draw_string(&disp, xc + 16, ym, 2, g);
+
+    g[0] = (mouse_debug_dy > 0) ? (char)0x84 : ' '; // down
+    ssd1306_draw_string(&disp, xc,      yb, 2, g);
+
+    // --- Button indicators (L / R) -------------------------------------------
+
+        int buttons = HidInput::instance().usb_mouse_buttons_raw();
+		if (buttons & 0x02) { ssd1306_draw_string(&disp, xc, ym, 2, (char*)"L"); }
+        if (buttons & 0x01) { ssd1306_draw_string(&disp, xc, ym, 2, (char*)"R"); }
+
+    // Clear deltas so arrows flash on impulse rather than latching.
+    mouse_debug_dx = 0;
+    mouse_debug_dy = 0;
+}
+
+void UserInterface::set_mouse_debug_delta(int dx, int dy) {
+    if (dx != 0) mouse_debug_dx = dx;
+    if (dy != 0) mouse_debug_dy = dy;
+}
+
 void UserInterface::handle_buttons() {
     for (int i = 0; i < 3; ++i) {
         bool state = gpio_get(btn_gpio[i]);
@@ -502,6 +559,7 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //   LANGUAGE, LAYOUT, DEADZONE ──(mid)──► MENU_2
 //   HELP_1  ──(mid)──► HELP_2
 //   HELP_2  ──(mid)──► MENU_1
+//   MOUSE_DEBUG  ──(mid)──► SERIAL
 //   SERIAL  ──(mid)──► USB_DEBUG
 //   USB_DEBUG ──(mid)──► MENU_1
 // ---------------------------------------------------------------------------
@@ -540,7 +598,7 @@ void UserInterface::on_button_down(int i) {
                     case 0: page = PAGE_MOUSE;  break;  // Back
                     case 1: page = PAGE_MENU_2; break;  // Settings
                     case 2: page = PAGE_HELP_1; break;  // Help
-                    case 3: page = PAGE_SERIAL; break;  // Debug
+                    case 3: page = PAGE_MOUSE_DEBUG; break;  // Debug
                 }
                 dirty = true;
                 break;
@@ -577,6 +635,11 @@ void UserInterface::on_button_down(int i) {
 
             case PAGE_HELP_2:
                 page  = PAGE_MENU_1;
+                dirty = true;
+                break;
+
+            case PAGE_MOUSE_DEBUG:
+                page  = PAGE_SERIAL;
                 dirty = true;
                 break;
 
@@ -725,20 +788,33 @@ void UserInterface::on_button_down(int i) {
 // USB_DEBUG, SPLASH) which manage their own refresh cadence.
 // ---------------------------------------------------------------------------
 void UserInterface::update() {
-    handle_buttons();
+       handle_buttons();
 
-    // Process requests posted by the deadzone timer IRQ.
+    // Handle mouse BEFORE joystick so that usb_mouse_buttons is up-to-date
+    // when handle_joystick() seeds mouse_state from it.
+    // Both flags are set by the same 50 ms timer callback, so both run every cycle.
+    if (mouse_dbg_poll_needed) {
+        mouse_dbg_poll_needed = false;
+        HidInput::instance().handle_mouse(0);
+    }
     if (dz_poll_needed) {
         dz_poll_needed = false;
         HidInput::instance().handle_joystick();
     }
+
     if (dz_dirty_requested) {
         dz_dirty_requested = false;
         if (page == PAGE_DEADZONE) dirty = true;
     }
-
-    if (!dirty) return;
-    dirty = false;
+    if (mouse_dbg_dirty_requested) {
+        mouse_dbg_dirty_requested = false;
+        if (page == PAGE_MOUSE_DEBUG) dirty = true;
+    }
+	
+	
+	
+	if (!dirty) return;
+	dirty = false;
 
     switch (page) {
 
@@ -748,7 +824,6 @@ void UserInterface::update() {
             break;
 
         case PAGE_JOY:
-            // Merged joystick page: both rows shown, cursor on joy_selected.
             update_status();
             update_joy(0, joy_selected);
             update_joy(1, joy_selected);
@@ -784,6 +859,11 @@ void UserInterface::update() {
         case PAGE_HELP_2:
             update_help_2();
             break;
+
+        case PAGE_MOUSE_DEBUG: {
+			update_mouse_debug();
+            break;
+        }
 
         case PAGE_SERIAL: {
             // Refresh at most every 500 ms to avoid flooding the display bus.

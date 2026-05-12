@@ -29,6 +29,7 @@ endif()
 
 # Pull in SDK (must be before project)
 set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/pico-sdk)
+set(PICO_TINYUSB_PATH ${CMAKE_SOURCE_DIR}/tinyusb)
 include(pico_sdk_import.cmake)
 
 project(atari_ikbd C CXX ASM)

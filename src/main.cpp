@@ -130,8 +130,6 @@ int main()
 
     multicore_launch_core1(core1_entry);
 
-    HidInput::instance().force_usb_mouse();
-
     // Enable watchdog: reboot automatically if the main loop stalls.
     watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
 

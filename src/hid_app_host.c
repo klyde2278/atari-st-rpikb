@@ -217,7 +217,6 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
   bool is_ps4 = ps4_is_dualshock4(vid, pid);
 
   if (is_ps4) {
-    printf("PS4 DualShock 4 detected: VID=0x%04X, PID=0x%04X\n", vid, pid);
     hidh_device_t* dev = alloc_device(dev_addr, instance);
     if (!dev) return;
     dev->hid_type    = HID_JOYSTICK;
@@ -247,8 +246,6 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
         dev->hid_type        = HID_MOUSE;
         dev->has_report_info = true;
         dev->report_size     = 64;
-        printf("Composite keyboard+mouse detected (VID=0x%04X PID=0x%04X), "
-               "reclassifying as MOUSE\n", vid, pid);
       }
     }
 
@@ -285,6 +282,8 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
         dev->has_report_info = true;
         dev->hid_type    = HID_MOUSE;
         dev->report_size = 64;
+		// Fallback to Report Protocol
+        tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT); 
       }
     }
 
@@ -303,10 +302,6 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
       dev->has_report_info = true;
       dev->hid_type        = filter_type;
       dev->report_size     = 64;
-
-      const char* type_str = (filter_type == HID_MOUSE)     ? "MOUSE"    :
-                             (filter_type == HID_JOYSTICK)   ? "JOYSTICK" : "UNKNOWN";
-      printf("HID Parser detected: %s (dev_addr=%d, inst=%d)\n", type_str, dev_addr, instance);
 
       tuh_hid_receive_report(dev_addr, instance);
 

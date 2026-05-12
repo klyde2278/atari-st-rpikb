@@ -54,6 +54,7 @@ void NVSettings::read() {
     if (storage.settings.version != 1) {
         memset(&storage.raw[0], 0, FLASH_SECTOR_SIZE);
         storage.settings.version = 1;
+        storage.settings.mouse_enabled = 1;         // Default: USB mouse enabled
 		storage.settings.language_index = 0;        // Default language (EN)
 		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (CZ)
         storage.settings.joystick_dead_zone = 0x08; // Default 0x08

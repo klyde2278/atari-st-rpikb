@@ -1,1 +1,4 @@
+[submodule "pico-sdk"]
+    path : pico-sdk
+    url : https://github.com/klyde2278/pico-sdk
 

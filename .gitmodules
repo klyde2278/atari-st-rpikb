@@ -3,4 +3,4 @@
     url = https://github.com/klyde2278/pico-sdk
 [submodule "tinyusb"]
     path = tinyusb
-    url = https://github.com/hathach/tinyusb
+    url = https://github.com/klyde2278/tinyusb

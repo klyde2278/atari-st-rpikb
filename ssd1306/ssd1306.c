@@ -174,6 +174,12 @@ void ssd1306_draw_empty_square(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t wi
 }
 
 
+// Clear a single pixel in the buffer (set to 0 / dark)
+static inline void ssd1306_clear_pixel(ssd1306_t *p, uint32_t x, uint32_t y) {
+    if (x >= p->width || y >= p->height) return;
+    p->buffer[x + p->width * (y >> 3)] &= (uint8_t)(~(1u << (y & 7)));
+}
+
 void ssd1306_draw_char_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, char c) {
     unsigned char uc = (unsigned char)c;
     if (uc < 0x20 || uc > 0xFF) return; // Out of table (ACCEPT Latin‑1)
@@ -274,6 +280,74 @@ void ssd1306_draw_utf8_string_with_font(ssd1306_t *p, uint32_t x, uint32_t y, ui
 // Convenience wrapper with builtin font
 void ssd1306_draw_utf8_string(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s) {
     ssd1306_draw_utf8_string_with_font(p, x, y, scale, font_8x5, s);
+}
+
+// ---------------------------------------------------------------------------
+// Inverse video rendering (white background, black glyph)
+// Works at any y offset and any scale, UTF-8 aware.
+//
+// Strategy:
+//   1. Fill the character cell (glyph width + kerning) x (glyph height) with
+//      white pixels using ssd1306_draw_square (OR-sets all bits to 1).
+//   2. For every pixel that the font would normally light up, clear it
+//      (AND-mask clears the bit), producing a black glyph on white background.
+// ---------------------------------------------------------------------------
+
+void ssd1306_draw_char_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y,
+                                          uint32_t scale, const uint8_t *font, char c) {
+    unsigned char uc = (unsigned char)c;
+    if (uc < 0x20 || uc > 0xFF) return;
+
+    uint32_t char_w = (uint32_t)font[1] * scale;  // pixel width of glyph
+    uint32_t char_h = (uint32_t)font[0] * scale;  // pixel height of glyph
+
+    // Fill background white (includes the kerning gap on the right)
+    ssd1306_draw_square(p, x, y, char_w + CHAR_KERNING, char_h);
+
+    // Clear glyph pixels to produce black lettering on white background
+    for (uint8_t i = 0; i < font[1]; ++i) {
+        uint8_t line = (uint8_t)(font[(uc - 0x20) * font[1] + i + 2]);
+        for (int8_t j = 0; j < (int8_t)font[0]; ++j, line >>= 1) {
+            if (line & 1) {
+                for (uint32_t si = 0; si < scale; ++si)
+                    for (uint32_t sj = 0; sj < scale; ++sj)
+                        ssd1306_clear_pixel(p, x + (uint32_t)i * scale + si,
+                                               y + (uint32_t)j * scale + sj);
+            }
+        }
+    }
+}
+
+void ssd1306_draw_string_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y,
+                                            uint32_t scale, const uint8_t *font, const char *s) {
+    // Leading white margin before the first glyph
+    ssd1306_draw_square(p, x, y, CHAR_KERNING, (uint32_t)font[0] * scale);
+    for (int32_t x_n = (int32_t)(x + CHAR_KERNING); *s; x_n += (int32_t)((uint32_t)font[1] * scale + CHAR_KERNING))
+        ssd1306_draw_char_inverse_with_font(p, (uint32_t)x_n, y, scale, font, *(s++));
+}
+
+void ssd1306_draw_string_inverse(ssd1306_t *p, uint32_t x, uint32_t y,
+                                  uint32_t scale, const char *s) {
+    ssd1306_draw_string_inverse_with_font(p, x, y, scale, font_8x5, s);
+}
+
+void ssd1306_draw_utf8_string_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y,
+                                                 uint32_t scale, const uint8_t *font, const char *s) {
+    // Leading white margin before the first glyph
+    ssd1306_draw_square(p, x, y, CHAR_KERNING, (uint32_t)font[0] * scale);
+    int32_t x_n = (int32_t)(x + CHAR_KERNING);
+    while (s && *s) {
+        uint32_t cp = utf8_next(&s);
+        uint8_t  b  = unicode_to_font_byte(cp);
+        char     ch = b ? (char)b : '?';
+        ssd1306_draw_char_inverse_with_font(p, (uint32_t)x_n, y, scale, font, ch);
+        x_n += (int32_t)((uint32_t)font[1] * scale + CHAR_KERNING);
+    }
+}
+
+void ssd1306_draw_utf8_string_inverse(ssd1306_t *p, uint32_t x, uint32_t y,
+                                       uint32_t scale, const char *s) {
+    ssd1306_draw_utf8_string_inverse_with_font(p, x, y, scale, font_8x5, s);
 }
 
 void ssd1306_show(ssd1306_t *p) {

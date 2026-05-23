@@ -59,14 +59,14 @@ typedef enum {
 *    @brief holds the configuration
 */
 typedef struct {
- uint8_t width;         /**< width of display */
- uint8_t height;     /**< height of display */
- uint8_t pages;        /**< stores pages of display (calculated on initialization*/
- uint8_t address;     /**< i2c address of display*/
- i2c_inst_t *i2c_i;     /**< i2c connection instance */
- bool external_vcc;     /**< whether display uses external vcc */
- uint8_t *buffer;    /**< display buffer */
- size_t bufsize;        /**< buffer size */
+ uint8_t width;      // Width of display
+ uint8_t height;     // Height of display
+ uint8_t pages;      // Stores pages of display (calculated on initialization
+ uint8_t address;    // I2C address of display
+ i2c_inst_t *i2c_i;  // I2C connection instance
+ bool external_vcc;  // Whether display uses external vcc
+ uint8_t *buffer;    // Display buffer
+ size_t bufsize;     // Buffer size
 } ssd1306_t;
 /**
 *    @brief initialize display
@@ -191,6 +191,54 @@ void ssd1306_draw_string(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, c
 // --- UTF-8 aware text rendering ---
 void ssd1306_draw_utf8_string_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, const char *s);
 void ssd1306_draw_utf8_string(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s);
+/**
+    @brief draw a single character in inverse video (white background, black glyph) with given font
+    @param[in] p     : instance of display
+    @param[in] x     : x starting position
+    @param[in] y     : y starting position
+    @param[in] scale : scale factor (1 = normal)
+    @param[in] font  : pointer to font
+    @param[in] c     : character to draw
+*/
+void ssd1306_draw_char_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, char c);
+/**
+    @brief draw a string in inverse video with given font
+    @param[in] p     : instance of display
+    @param[in] x     : x starting position
+    @param[in] y     : y starting position
+    @param[in] scale : scale factor
+    @param[in] font  : pointer to font
+    @param[in] s     : null-terminated string (Latin-1 bytes)
+*/
+void ssd1306_draw_string_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, const char *s);
+/**
+    @brief draw a string in inverse video with builtin font
+    @param[in] p     : instance of display
+    @param[in] x     : x starting position
+    @param[in] y     : y starting position
+    @param[in] scale : scale factor
+    @param[in] s     : null-terminated string (Latin-1 bytes)
+*/
+void ssd1306_draw_string_inverse(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s);
+/**
+    @brief draw a UTF-8 string in inverse video with given font
+    @param[in] p     : instance of display
+    @param[in] x     : x starting position
+    @param[in] y     : y starting position
+    @param[in] scale : scale factor
+    @param[in] font  : pointer to font
+    @param[in] s     : null-terminated UTF-8 string
+*/
+void ssd1306_draw_utf8_string_inverse_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, const char *s);
+/**
+    @brief draw a UTF-8 string in inverse video with builtin font
+    @param[in] p     : instance of display
+    @param[in] x     : x starting position
+    @param[in] y     : y starting position
+    @param[in] scale : scale factor
+    @param[in] s     : null-terminated UTF-8 string
+*/
+void ssd1306_draw_utf8_string_inverse(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s);
 #ifdef __cplusplus
 }
 #endif

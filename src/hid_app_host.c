@@ -1,4 +1,4 @@
-/* 
+/*
  * HID Application Host - Adapter for official TinyUSB
  * This provides backward compatibility with the custom TinyUSB fork API
  */
@@ -25,6 +25,19 @@ typedef struct {
 static hidh_device_t hid_devices[CFG_TUH_HID];
 static HID_TYPE filter_type = HID_UNDEFINED;
 
+// ---------------------------------------------------------------------------
+// Per-device keyboard LED probe state.
+// Addresses 1-127 are valid; slot 0 unused. 16 slots covers all practical
+// configurations (hub + 4-port hub = 5 hops max, well under 16 addresses).
+// ---------------------------------------------------------------------------
+#define KB_LED_RID_UNKNOWN 0xFF
+#define KB_LED_ADDR_MAX    16
+
+// Confirmed LED output report ID per keyboard address (0xFF = not yet found).
+static uint8_t s_kb_led_rid[KB_LED_ADDR_MAX] = {
+    [0 ... (KB_LED_ADDR_MAX - 1)] = KB_LED_RID_UNKNOWN
+};
+
 static uint32_t debug_mount_calls    = 0;
 static uint32_t debug_report_calls   = 0;
 static uint32_t debug_report_copied  = 0;
@@ -46,9 +59,16 @@ uint32_t hid_debug_get_last_addr_inst(void) { return (debug_last_dev_addr << 8) 
 uint16_t hid_debug_get_last_desc_len(void)  { return debug_last_desc_len;  }
 HID_TYPE hid_debug_get_last_hid_type(void)  { return debug_last_hid_type;  }
 
+uint8_t hid_app_get_kb_led_rid(uint8_t dev_addr) {
+  return (dev_addr < KB_LED_ADDR_MAX) ? s_kb_led_rid[dev_addr] : KB_LED_RID_UNKNOWN;
+}
+
 // Forward declarations - these helpers are defined later in this file.
 static hidh_device_t* find_device(uint8_t dev_addr);
 static hidh_device_t* find_device_by_inst(uint8_t dev_addr, uint8_t instance);
+
+// Forward declaration for ISR callback defined in the main HID application.
+extern void tuh_hid_isr(uint8_t dev_addr, xfer_result_t event);
 
 uint8_t tuh_hid_get_instance(uint8_t dev_addr) { hidh_device_t* dev = find_device(dev_addr); return dev ? dev->instance : 0; }
 
@@ -103,15 +123,6 @@ static hidh_device_t* alloc_device(uint8_t dev_addr, uint8_t instance) {
     }
   }
   return NULL;
-}
-
-static void free_device(uint8_t dev_addr) {
-  for (int i = 0; i < CFG_TUH_HID; i++) {
-    if (hid_devices[i].dev_addr == dev_addr) {
-      memset(&hid_devices[i], 0, sizeof(hidh_device_t));
-      return;
-    }
-  }
 }
 
 bool CALLBACK_HIDParser_FilterHIDReportItem(HID_ReportItem_t* const item)
@@ -254,9 +265,8 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
       dev->report_size = sizeof(hid_keyboard_report_t);
     }
 
-    if (is_composite_mouse) {
-      tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
-    }
+    // Always switch to Report protocol for full key coverage (multimedia, extra keys).
+    tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
 
     tuh_hid_receive_report(dev_addr, instance);
 
@@ -282,8 +292,12 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
         dev->has_report_info = true;
         dev->hid_type    = HID_MOUSE;
         dev->report_size = 64;
-		// Fallback to Report Protocol
-        tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT); 
+        // Switch to Report protocol to receive full HID reports.
+        // On failure, fall back to boot protocol sizing.
+        if (!tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT)) {
+          dev->has_report_info = false;
+          dev->report_size     = sizeof(hid_mouse_report_t);
+        }
       }
     }
 
@@ -303,6 +317,10 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
       dev->hid_type        = filter_type;
       dev->report_size     = 64;
 
+      if (filter_type == HID_KEYBOARD) {
+        tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
+      }
+
       tuh_hid_receive_report(dev_addr, instance);
 
       if (filter_type == HID_KEYBOARD) {
@@ -315,7 +333,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
       }
       else {
         bool first_interface = true;
-        for (int i = 0; i < CFG_TUSB_HOST_DEVICE_MAX; i++) {
+        for (int i = 0; i < CFG_TUH_HID; i++) {
           if (hid_devices[i].dev_addr == dev_addr &&
               hid_devices[i].mounted  &&
               &hid_devices[i] != dev) {
@@ -334,8 +352,10 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report_
 
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
   debug_unmount_calls++;
-  // Keep active device count in sync with unmounts.
-  if (debug_active_devices > 0) --debug_active_devices;
+
+  if (dev_addr < KB_LED_ADDR_MAX) {
+    s_kb_led_rid[dev_addr] = KB_LED_RID_UNKNOWN;
+  }
 
   hidh_device_t* dev = find_device_by_inst(dev_addr, instance);
   if (!dev) return;
@@ -343,17 +363,21 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
   dev->report_dest    = NULL;
   dev->report_pending = false;
 
-  bool should_notify = true;
+  // Check whether any other interface of this device is still mounted.
+  bool last_interface = true;
   for (int i = 0; i < CFG_TUH_HID; i++) {
     if (hid_devices[i].dev_addr == dev_addr &&
         hid_devices[i].mounted  &&
-        hid_devices[i].instance < instance) {
-      should_notify = false;
+        &hid_devices[i] != dev) {
+      last_interface = false;
       break;
     }
   }
 
-  if (should_notify) {
+  // Only decrement the active device counter when the last interface disappears.
+  if (last_interface && debug_active_devices > 0) --debug_active_devices;
+
+  if (last_interface) {
     tuh_hid_unmounted_cb(dev_addr);
   }
 
@@ -384,10 +408,54 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     debug_report_copied++;
     memcpy(dev->report_dest, report, copy_len);
     dev->report_pending = false;
-    extern void tuh_hid_isr(uint8_t dev_addr, xfer_result_t event);
     tuh_hid_isr(dev_addr, XFER_RESULT_SUCCESS);
     dev->report_dest = NULL;
   }
 
   tuh_hid_receive_report(dev_addr, instance);
+}
+
+// ---------------------------------------------------------------------------
+// LED NumLock probe — two TinyUSB weak-callback overrides.
+//
+// Problem: tuh_hid_set_protocol() queues a SET_PROTOCOL control transfer while
+// we are still inside tuh_task(). TinyUSB cannot process the completion event
+// until tuh_task() returns, so EP0 stays "busy" at the SW layer even after the
+// HW transfer finishes. Any tuh_hid_set_report() call made from the mount
+// callback (even after sleep_ms) silently fails.
+//
+// Fix: tuh_hid_set_protocol_complete_cb() is invoked by TinyUSB exactly when
+// SET_PROTOCOL is fully processed. EP0 is free at that instant — we can send
+// SET_REPORT immediately. A STALL response (len==0) means the keyboard uses a
+// non-zero report ID for its LED output; we retry with IDs 0, 1, 2 in order.
+// ---------------------------------------------------------------------------
+
+void tuh_hid_set_protocol_complete_cb(uint8_t dev_addr, uint8_t idx, uint8_t protocol) {
+  if (protocol != HID_PROTOCOL_REPORT) return;
+  if (tuh_hid_interface_protocol(dev_addr, idx) != HID_ITF_PROTOCOL_KEYBOARD) return;
+  if (dev_addr >= KB_LED_ADDR_MAX) return;
+
+  s_kb_led_rid[dev_addr] = KB_LED_RID_UNKNOWN;   // reset, start probing
+  uint8_t led = 0x01;                             // NumLock ON
+  tuh_hid_set_report(dev_addr, idx, 0, HID_REPORT_TYPE_OUTPUT, &led, sizeof(led));
+}
+
+void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t idx,
+                                    uint8_t report_id, uint8_t report_type,
+                                    uint16_t len) {
+  if (report_type != HID_REPORT_TYPE_OUTPUT) return;
+  if (dev_addr >= KB_LED_ADDR_MAX) return;
+  if (s_kb_led_rid[dev_addr] != KB_LED_RID_UNKNOWN) return;  // already confirmed
+
+  if (len > 0) {
+    s_kb_led_rid[dev_addr] = report_id;   // confirmed: record working report ID
+  } else if (report_id < 2) {
+    // STALL: probe next report ID on the same interface instance.
+    uint8_t led = 0x01;
+    tuh_hid_set_report(dev_addr, idx, report_id + 1,
+                       HID_REPORT_TYPE_OUTPUT, &led, sizeof(led));
+  }
+  // report_id == 2 and still failing: keyboard does not support LED output
+  // in Report protocol (very rare). handle_keyboard() will keep trying via
+  // its own retry path but will also not block anything useful.
 }

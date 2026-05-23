@@ -189,6 +189,86 @@ bool HidInput::get_xbox_joystick(int joystick_num, uint8_t& axis, uint8_t& butto
 }
 
 // ---------------------------------------------------------------------------
+// process_autofire — autofire state machine for one joystick port.
+//
+// Called every handle_joystick() cycle (~10 ms) with the raw fire button state.
+// Returns the effective fire state: raw OR autofire pulse.
+//
+// Mode (from NVSettings, set via UI):
+//   0 = OFF    — autofire fully disabled; raw fire passes through unchanged.
+//   1 = STANDBY — autofire ready; hold fire 3 s to toggle ON/OFF.
+//
+// When active (ON):
+//   Generates a 50% duty-cycle pulse at the configured rate (1–15 Hz).
+//   Effective fire = raw_fire OR pulse.
+//
+// Hold state machine (per joy):
+//   IDLE          — waiting for button press.
+//   HOLD_TRACKING — button held; measuring elapsed time.
+//   WAIT_RELEASE  — toggle just happened; ignore button until released.
+// ---------------------------------------------------------------------------
+bool HidInput::process_autofire(int joy, bool raw_fire)
+{
+    if (!ui_) return raw_fire;
+
+    uint8_t mode = ui_->get_autofire_mode(joy);
+
+    // If autofire is OFF, reset any active state and pass raw fire through.
+    if (mode == 0) {
+        autofire_active[joy]        = false;
+        autofire_hold_tracking[joy] = false;
+        autofire_wait_release[joy]  = false;
+        return raw_fire;
+    }
+
+    // --- Hold detection (STANDBY mode) ---
+    if (autofire_wait_release[joy]) {
+        // Wait for button release before starting a new hold measurement.
+        if (!raw_fire) autofire_wait_release[joy] = false;
+    } else if (raw_fire) {
+        if (!autofire_hold_tracking[joy]) {
+            autofire_hold_tracking[joy] = true;
+            autofire_hold_start[joy]    = get_absolute_time();
+        } else {
+            int64_t held_us = absolute_time_diff_us(autofire_hold_start[joy],
+                                                    get_absolute_time());
+            if (held_us >= 3000000LL) {
+                if (!autofire_active[joy]) {
+                    // Activate: reset pulse generator so first pulse fires immediately.
+                    autofire_active[joy]      = true;
+                    autofire_phase_state[joy] = true;
+                    autofire_phase_tm[joy]    = get_absolute_time();
+                } else {
+                    autofire_active[joy] = false;
+                }
+                autofire_hold_tracking[joy] = false;
+                autofire_wait_release[joy]  = true;
+            }
+        }
+    } else {
+        autofire_hold_tracking[joy] = false;
+    }
+
+    // --- Pulse generator ---
+    bool pulse = false;
+    if (autofire_active[joy]) {
+        uint8_t rate_hz = ui_->get_autofire_rate(joy);
+        if (rate_hz < 1) rate_hz = 1;
+        // Half-period in microseconds (50 % duty cycle).
+        uint32_t half_period_us = 1000000u / (2u * (uint32_t)rate_hz);
+        int64_t elapsed_us = absolute_time_diff_us(autofire_phase_tm[joy],
+                                                   get_absolute_time());
+        if (elapsed_us >= (int64_t)half_period_us) {
+            autofire_phase_state[joy] = !autofire_phase_state[joy];
+            autofire_phase_tm[joy]    = get_absolute_time();
+        }
+        pulse = autofire_phase_state[joy];
+    }
+
+    return raw_fire || pulse;
+}
+
+// ---------------------------------------------------------------------------
 // handle_joystick() — main joystick processing.
 //
 // Port mode (set via UI, stored in get_joystick() bits):
@@ -200,12 +280,12 @@ bool HidInput::get_xbox_joystick(int joystick_num, uint8_t& axis, uint8_t& butto
 //   USB mode   -> USB joystick active,  GPIO signals ignored for that port.
 //
 // mouse_state bits:
-//   bit 0 : Joy1 fire = right mouse button
-//   bit 1 : Joy0 fire = left mouse button
+//   bit 0 : right mouse button (also Joy1 fire)
+//   bit 1 : left  mouse button (also Joy0 fire)
 //
-// handle_mouse() runs first and seeds usb_mouse_buttons from USB reports.
-// This function starts from that persistent state, then ORs joystick fire
-// bits on top:  mouse button bit = USB mouse button | joystick fire
+// USB mouse buttons are seeded first and are independent of joystick state.
+// Joystick fire (D-Sub GPIO or USB) is then OR'd on top so that either
+// source can assert a button without the other source clearing it.
 //
 // Joy0 fire GPIO is always read in D-Sub mode (even with mouse enabled) to
 // support an Atari quadrature mouse whose left button is wired to Joy0 fire.
@@ -213,11 +293,10 @@ bool HidInput::get_xbox_joystick(int joystick_num, uint8_t& axis, uint8_t& butto
 // ---------------------------------------------------------------------------
 void HidInput::handle_joystick()
 {
-    // Seed mouse_state button bits from all persistent USB sources:
-    //   usb_mouse_buttons : last known USB mouse button state
-    //   usb_joy_fire      : last known USB joystick fire state
-    // GPIO fire bits are then ORed on top for active D-Sub ports.
-    mouse_state = (mouse_state & ~0x03) | usb_mouse_buttons | usb_joy_fire;
+    // Seed mouse_state button bits from USB mouse buttons only.
+    // Joystick fire sources (D-Sub GPIO or USB) are OR'd in below so that
+    // they cannot override or suppress the USB mouse button state.
+    mouse_state = (mouse_state & ~0x03) | usb_mouse_buttons;
 
     for (int joystick = 1; joystick >= 0; --joystick) {
         uint8_t axis   = 0;
@@ -225,23 +304,24 @@ void HidInput::handle_joystick()
 
         if (ui_->get_joystick() & (1 << joystick)) {
             // --- D-Sub mode: read GPIO, ignore USB ---
-            // Clear the USB fire state for this port so switching back to D-Sub
-            // does not leave a ghost state in usb_joy_fire.
+            // Clear USB fire state for this port to avoid ghost state on mode switch.
             if (joystick == 1) {
-                usb_joy_fire &= ~0x01;
-                mouse_state  &= ~0x01;   // re-apply without stale USB bit
+                usb_joy_fire     &= ~0x01;
+                usb_joy_raw_fire &= ~0x01;
                 axis |= gpio_get(JOY1_UP)    ? 0 : 1;
                 axis |= gpio_get(JOY1_DOWN)  ? 0 : 2;
                 axis |= gpio_get(JOY1_LEFT)  ? 0 : 4;
                 axis |= gpio_get(JOY1_RIGHT) ? 0 : 8;
                 joystick_state = (joystick_state & ~0xF0) | (axis << 4);
-                mouse_state   |= gpio_get(JOY1_FIRE) ? 0 : 0x01;
+                bool fire1 = process_autofire(1, !gpio_get(JOY1_FIRE));
+                if (fire1) mouse_state |= 0x01;
             }
             else {
-                usb_joy_fire &= ~0x02;
-                mouse_state  &= ~0x02;
+                usb_joy_fire     &= ~0x02;
+                usb_joy_raw_fire &= ~0x02;
                 // Joy0 fire always read: covers Atari quadrature mouse left button.
-                mouse_state |= gpio_get(JOY0_FIRE) ? 0 : 0x02;
+                bool fire0 = process_autofire(0, !gpio_get(JOY0_FIRE));
+                if (fire0) mouse_state |= 0x02;
                 if (!ui_->get_mouse_enabled()) {
                     axis |= gpio_get(JOY0_UP)    ? 0 : 1;
                     axis |= gpio_get(JOY0_DOWN)  ? 0 : 2;
@@ -268,20 +348,37 @@ void HidInput::handle_joystick()
             }
 
             if (got_input) {
-                // Update persistent fire state so it survives busy cycles.
+                // New report arrived: update last known raw fire state and directions.
                 if (joystick == 1) {
-                    if (button) usb_joy_fire |= 0x01; else usb_joy_fire &= ~0x01;
-                    mouse_state    = (mouse_state & ~0x01) | (usb_joy_fire & 0x01);
+                    if (button) usb_joy_raw_fire |= 0x01; else usb_joy_raw_fire &= ~0x01;
                     joystick_state = (joystick_state & ~0xF0) | (axis << 4);
-                }
-                else {
-                    if (button) usb_joy_fire |= 0x02; else usb_joy_fire &= ~0x02;
-                    mouse_state    = (mouse_state & ~0x02) | (usb_joy_fire & 0x02);
+                } else {
+                    if (button) usb_joy_raw_fire |= 0x02; else usb_joy_raw_fire &= ~0x02;
                     joystick_state = (joystick_state & ~0x0F) | axis;
                 }
             }
-            // If not got_input (device busy), usb_joy_fire retains its last
-            // value and was already seeded into mouse_state at the top.
+
+            // Always call process_autofire with the last known raw fire state,
+            // mirroring D-Sub GPIO behaviour: the hold timer advances every cycle
+            // regardless of whether a fresh USB report has arrived.
+            // For joy1, JOY1_FIRE GPIO is also included: the right button of an
+            // Atari quadrature mouse is wired to that pin and must work regardless
+            // of whether joy1 is in USB or D-Sub mode.
+            if (joystick == 1) {
+                bool raw = (bool)(usb_joy_raw_fire & 0x01) || !gpio_get(JOY1_FIRE);
+                bool eff_fire = process_autofire(1, raw);
+                if (eff_fire) usb_joy_fire |= 0x01; else usb_joy_fire &= ~0x01;
+            } else {
+                bool eff_fire = process_autofire(0, (bool)(usb_joy_raw_fire & 0x02));
+                if (eff_fire) usb_joy_fire |= 0x02; else usb_joy_fire &= ~0x02;
+            }
+
+            // OR effective fire into mouse_state.
+            if (joystick == 1) {
+                if (usb_joy_fire & 0x01) mouse_state |= 0x01;
+            } else {
+                if (usb_joy_fire & 0x02) mouse_state |= 0x02;
+            }
         }
     }
 }

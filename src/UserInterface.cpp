@@ -158,10 +158,23 @@ void UserInterface::usb_connect_state(int kb, int mouse, int joy) {
     num_joy   = joy;
 }
 
-int8_t  UserInterface::get_mouse_speed()   { return settings.get_settings().mouse_speed;          }
-uint8_t UserInterface::get_mouse_enabled() { return settings.get_settings().mouse_enabled;         }
-uint8_t UserInterface::get_joystick()      { return settings.get_settings().joy_device;            }
-uint8_t UserInterface::get_dead_zone()     { return settings.get_settings().joystick_dead_zone;    }
+int8_t  UserInterface::get_mouse_speed()   { return settings.get_settings().mouse_speed;         }
+uint8_t UserInterface::get_mouse_enabled() { return settings.get_settings().mouse_enabled;       }
+uint8_t UserInterface::get_joystick()      { return settings.get_settings().joy_device;          }
+uint8_t UserInterface::get_dead_zone()     { return settings.get_settings().joystick_dead_zone;  }
+
+uint8_t UserInterface::get_autofire_mode(int joy) {
+    return (joy == 0) ? settings.get_settings().autofire_mode_joy0
+                      : settings.get_settings().autofire_mode_joy1;
+}
+
+uint8_t UserInterface::get_autofire_rate(int joy) {
+    uint8_t r = (joy == 0) ? settings.get_settings().autofire_rate_joy0
+                           : settings.get_settings().autofire_rate_joy1;
+    if (r < AUTOFIRE_MIN) r = AUTOFIRE_MIN;
+    if (r > AUTOFIRE_MAX) r = AUTOFIRE_MAX;
+    return r;
+}
 
 void UserInterface::set_mouse_enabled(uint8_t en) {
     settings.get_settings().mouse_enabled = en;
@@ -259,23 +272,24 @@ void UserInterface::update_joy(int index, int selected) {
 // ---------------------------------------------------------------------------
 void UserInterface::update_menu1() {
     const char* entries[MENU1_COUNT] = {
-        get_translation(KEY_BACK, lang_idx),
+        get_translation(KEY_BACK,     lang_idx),
+		get_translation(KEY_AUTOFIRE, lang_idx),
         get_translation(KEY_SETTINGS, lang_idx),
-        get_translation(KEY_HELP, lang_idx),
-        get_translation(KEY_DEBUG, lang_idx)
+        get_translation(KEY_HELP,     lang_idx),
+        get_translation(KEY_DEBUG,    lang_idx)
     };
     ssd1306_clear(&disp);
     for (int i = 0; i < MENU1_COUNT; ++i) {
         char cur[2] = { (menu1_selected == i) ? UI_CURSOR_GLYPH : ' ', 0 };
-        ssd1306_draw_string(&disp, 0,  i * MENU_LINE_H, 1, cur);
-        ssd1306_draw_utf8_string(&disp, 10, i * MENU_LINE_H, 1, (char*)entries[i]);
+        ssd1306_draw_string(&disp, 0,  i * MENU1_LINE_H, 1, cur);
+        ssd1306_draw_utf8_string(&disp, 10, i * MENU1_LINE_H, 1, (char*)entries[i]);
     }
 }
 
 // ---------------------------------------------------------------------------
 // update_menu2
 // Renders PAGE_MENU_2 (settings sub-menu).
-// Entries: Back | Language | Kbd Layout | Deadzone
+// Entries: Back | Language | Kbd Layout | Deadzone | Autofire
 // The UI_CURSOR_GLYPH marks the currently selected entry (menu2_selected).
 // Left / Right buttons cycle through entries; Middle button activates.
 // ---------------------------------------------------------------------------
@@ -289,14 +303,14 @@ void UserInterface::update_menu2() {
     ssd1306_clear(&disp);
     for (int i = 0; i < MENU2_COUNT; ++i) {
         char cur[2] = { (menu2_selected == i) ? UI_CURSOR_GLYPH : ' ', 0 };
-        ssd1306_draw_string(&disp, 0,  i * MENU_LINE_H, 1, cur);
-        ssd1306_draw_utf8_string(&disp, 10, i * MENU_LINE_H, 1, (char*)entries[i]);
+        ssd1306_draw_string(&disp, 0,  i * MENU2_LINE_H, 1, cur);
+        ssd1306_draw_utf8_string(&disp, 10, i * MENU2_LINE_H, 1, (char*)entries[i]);
     }
 }
 
 void UserInterface::update_splash() {
     ssd1306_clear(&disp);
-    ssd1306_draw_string(&disp, 29,  0, 2, (char*)"EIFFEL");
+    ssd1306_draw_string_inverse(&disp, 0,  0, 2, (char*)"  EIFFEL   ");
     ssd1306_draw_string(&disp, 30, 25, 1, (char*)"Pico - USB");
     ssd1306_draw_string(&disp, 40, 36, 1, (char*)"Adapter");
     ssd1306_draw_string(&disp, 44, 55, 1, (char*)"v" PROJECT_VERSION_STRING);
@@ -351,7 +365,7 @@ void UserInterface::update_usb_debug() {
 // Left / Right changes the language; Middle returns to PAGE_MENU_2.
 // ---------------------------------------------------------------------------
 void UserInterface::update_language() {
-    ssd1306_draw_utf8_string(&disp, 0,  0, 1, get_translation(KEY_LANGUAGE, lang_idx));
+    ssd1306_draw_utf8_string_inverse(&disp, 0,  0, 1, get_translation(KEY_LANGUAGE, lang_idx));
     ssd1306_draw_string     (&disp, 0, 14, 2, (char*)languages[lang_idx]);
 }
 
@@ -362,7 +376,7 @@ void UserInterface::update_language() {
 // ---------------------------------------------------------------------------
 void UserInterface::update_layout() {
     const char* layout = kLayouts[settings.get_settings().keyboard_layout_index % NUM_LAYOUTS];
-    ssd1306_draw_utf8_string(&disp, 0,  0, 1, get_translation(KEY_LAYOUT, lang_idx));
+    ssd1306_draw_utf8_string_inverse(&disp, 0,  0, 1, get_translation(KEY_LAYOUT, lang_idx));
     ssd1306_draw_utf8_string(&disp, 0, 14, 2, (char*)layout);
 }
 
@@ -390,7 +404,7 @@ void UserInterface::update_help_2() {
 
 void UserInterface::update_deadzone() {
     char buf[32];
-    ssd1306_draw_utf8_string(&disp, 0, 0, 1, get_translation(KEY_DEAD_ZONE, lang_idx));
+    ssd1306_draw_utf8_string_inverse(&disp, 0, 0, 1, get_translation(KEY_DEAD_ZONE, lang_idx));
 
     {
         char dz_str[32];
@@ -442,6 +456,64 @@ void UserInterface::update_deadzone() {
 }
 
 // ---------------------------------------------------------------------------
+// update_autofire
+// PAGE_AUTOFIRE layout (128 × 64 px, scale 1):
+//   y= 0  Title "Autofire"
+//   y= 9  [cur] Joy1 mode  (OFF / STBY / ON!)
+//   y=18  [cur] Joy1 rate  (1..15 Hz)
+//   y=27        Joy1 rate slider
+//   y=36  [cur] Joy0 mode
+//   y=45  [cur] Joy0 rate
+//   y=54        Joy0 rate slider
+//
+// autofire_selected: 0=J0 mode, 1=J0 rate, 2=J1 mode, 3=J1 rate
+// MIDDLE advances cursor; on last item exits to PAGE_MENU_1.
+// LEFT/RIGHT: toggle mode (0=OFF<->1=STBY), or decrease/increase rate.
+// ---------------------------------------------------------------------------
+void UserInterface::update_autofire() {
+    char buf[32];
+
+    ssd1306_draw_string_inverse(&disp, 0, 0, 1, get_translation(KEY_AUTOFIRE, lang_idx));
+
+	for (int d = 0; d < 2; ++d) {
+		int joy = 1 - d;               // d=0 → Joy1 (top), d=1 → Joy0 (bottom)
+		int y_mode   = (d == 0) ?  9 : 36;
+		int y_rate   = (d == 0) ? 18 : 45;
+		int y_slider = (d == 0) ? 27 : 54;
+		int item_mode = d * 2;         // 0 or 2  (display order)
+		int item_rate = d * 2 + 1;     // 1 or 3  (display order)
+
+        // --- Mode line ---
+        uint8_t mode = (joy == 0) ? settings.get_settings().autofire_mode_joy0
+                                  : settings.get_settings().autofire_mode_joy1;
+        bool active = HidInput::instance().is_autofire_active(joy);
+        const char* mode_str = (mode == 0) ? "OFF " : (active ? " ON!" : "STAND BY");
+
+        char cur[2] = { (autofire_selected == item_mode) ? UI_CURSOR_GLYPH : ' ', 0 };
+        ssd1306_draw_string(&disp, 0, y_mode, 1, cur);
+        sprintf(buf, "Joy%d: %s", joy, mode_str);
+        ssd1306_draw_string(&disp, 10, y_mode, 1, buf);
+
+        // --- Rate line ---
+        uint8_t rate = (joy == 0) ? settings.get_settings().autofire_rate_joy0
+                                  : settings.get_settings().autofire_rate_joy1;
+
+        cur[0] = (autofire_selected == item_rate) ? UI_CURSOR_GLYPH : ' ';
+        ssd1306_draw_string(&disp, 0, y_rate, 1, cur);
+        sprintf(buf, "Joy%d:%3dHz", joy, (int)rate);
+        ssd1306_draw_string(&disp, 10, y_rate, 1, buf);
+
+        // --- Rate slider ---
+        sprintf(buf, "\x80=============\x82");
+        int cursor = (int)rate - AUTOFIRE_MIN;   // 0..14
+        if (cursor < 0)                  cursor = 0;
+        if (cursor >= AUTOFIRE_MAX)  cursor = AUTOFIRE_MAX;
+        buf[cursor] = (char)0x81;
+        ssd1306_draw_string(&disp, 10, y_slider, 1, buf);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // update_mouse_debug
 // Screen layout (128 x 64):
 //
@@ -462,9 +534,9 @@ void UserInterface::update_mouse_debug() {
     ssd1306_clear(&disp);
 
     // --- Header lines --------------------------------------------------------
-    ssd1306_draw_string(&disp,  0,  0, 1, (char*)"Kb test");
+    ssd1306_draw_string_inverse(&disp,  0,  0, 1, (char*)"Kb test");
     ssd1306_draw_string(&disp,  0, 10, 1, (char*)"(en-US)");
-    ssd1306_draw_string(&disp, 68,  0, 1, (char*)"Mse test");
+    ssd1306_draw_string_inverse(&disp, 68,  0, 1, (char*)"Mse test");
 
     // --- Left half: pressed USB key cap --------------------------------------
     // Label is supplied by HidInput::handle_keyboard() via last_key_label.
@@ -548,6 +620,7 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //           ──(mid, joy1)──► MENU_1
 //   MENU_1  ──(left/right)── cycle entries
 //           ──(mid, Back)──► MOUSE
+//           ──(mid, Autofire)──► AUTOFIRE
 //           ──(mid, Settings)──► MENU_2
 //           ──(mid, Help)──► HELP_1
 //           ──(mid, Debug)──► SERIAL
@@ -557,6 +630,7 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //           ──(mid, Kbd Layout)──► LAYOUT
 //           ──(mid, Deadzone)──► DEADZONE
 //   LANGUAGE, LAYOUT, DEADZONE ──(mid)──► MENU_2
+//   AUTOFIRE ──(mid)──► MENU_1
 //   HELP_1  ──(mid)──► HELP_2
 //   HELP_2  ──(mid)──► MENU_1
 //   MOUSE_DEBUG  ──(mid)──► SERIAL
@@ -595,10 +669,14 @@ void UserInterface::on_button_down(int i) {
 
             case PAGE_MENU_1:
                 switch (menu1_selected) {
-                    case 0: page = PAGE_MOUSE;  break;  // Back
-                    case 1: page = PAGE_MENU_2; break;  // Settings
-                    case 2: page = PAGE_HELP_1; break;  // Help
-                    case 3: page = PAGE_MOUSE_DEBUG; break;  // Debug
+                    case 0: page = PAGE_MOUSE;       break;  // Back
+                    case 1:                                  // Autofire
+                        autofire_selected = 0;
+                        page = PAGE_AUTOFIRE;
+                        break;
+					case 2: page = PAGE_MENU_2;      break;  // Settings
+                    case 3: page = PAGE_HELP_1;      break;  // Help
+                    case 4: page = PAGE_MOUSE_DEBUG; break;  // Debug
                 }
                 dirty = true;
                 break;
@@ -625,6 +703,17 @@ void UserInterface::on_button_down(int i) {
 
             case PAGE_DEADZONE:
                 page  = PAGE_MENU_2;
+                dirty = true;
+                break;
+
+            case PAGE_AUTOFIRE:
+                // MIDDLE advances the cursor through items; on the last item exits.
+                if (autofire_selected < 3) {
+                    ++autofire_selected;
+                } else {
+                    autofire_selected = 0;
+                    page = PAGE_MENU_1;
+                }
                 dirty = true;
                 break;
 
@@ -676,10 +765,39 @@ void UserInterface::on_button_down(int i) {
                 break;
 
             case PAGE_MENU_1:
-                // Cycle backwards through menu entries (wraps around).
                 menu1_selected = (menu1_selected - 1 + MENU1_COUNT) % MENU1_COUNT;
                 dirty = true;
                 break;
+
+            case PAGE_AUTOFIRE: {
+                auto& st = settings.get_settings();
+                if (autofire_selected == 0) {
+                    // Joy1 mode: toggle OFF <-> STANDBY
+                    st.autofire_mode_joy1 = st.autofire_mode_joy1 ? 0 : 1;
+                    settings.write();
+                    dirty = true;
+                } else if (autofire_selected == 1) {
+                    // Joy1 rate: LEFT = decrease
+                    if (st.autofire_rate_joy1 > AUTOFIRE_MIN) {
+                        --st.autofire_rate_joy1;
+                        settings.write();
+                        dirty = true;
+                    }
+                } else if (autofire_selected == 2) {
+                    // Joy0 mode: toggle OFF <-> STANDBY
+                    st.autofire_mode_joy0 = st.autofire_mode_joy0 ? 0 : 1;
+                    settings.write();
+                    dirty = true;
+                } else {
+                    // Joy0 rate: LEFT = decrease
+                    if (st.autofire_rate_joy0 > AUTOFIRE_MIN) {
+                        --st.autofire_rate_joy0;
+                        settings.write();
+                        dirty = true;
+                    }
+                }
+                break;
+            }
 
             case PAGE_MENU_2:
                 // Cycle backwards through menu entries (wraps around).
@@ -737,10 +855,39 @@ void UserInterface::on_button_down(int i) {
                 break;
 
             case PAGE_MENU_1:
-                // Cycle forwards through menu entries (wraps around).
                 menu1_selected = (menu1_selected + 1) % MENU1_COUNT;
                 dirty = true;
                 break;
+
+            case PAGE_AUTOFIRE: {
+                auto& st = settings.get_settings();
+                if (autofire_selected == 0) {
+                    // Joy1 mode: toggle OFF <-> STANDBY
+                    st.autofire_mode_joy1 = st.autofire_mode_joy1 ? 0 : 1;
+                    settings.write();
+                    dirty = true;
+                } else if (autofire_selected == 1) {
+                    // Joy1 rate: RIGHT = increase
+                    if (st.autofire_rate_joy1 < AUTOFIRE_MAX) {
+                        ++st.autofire_rate_joy1;
+                        settings.write();
+                        dirty = true;
+                    }
+                } else if (autofire_selected == 2) {
+                    // Joy0 mode: toggle OFF <-> STANDBY
+                    st.autofire_mode_joy0 = st.autofire_mode_joy0 ? 0 : 1;
+                    settings.write();
+                    dirty = true;
+                } else {
+                    // Joy0 rate: RIGHT = increase
+                    if (st.autofire_rate_joy0 < AUTOFIRE_MAX) {
+                        ++st.autofire_rate_joy0;
+                        settings.write();
+                        dirty = true;
+                    }
+                }
+                break;
+            }
 
             case PAGE_MENU_2:
                 // Cycle forwards through menu entries (wraps around).
@@ -804,7 +951,7 @@ void UserInterface::update() {
 
     if (dz_dirty_requested) {
         dz_dirty_requested = false;
-        if (page == PAGE_DEADZONE) dirty = true;
+        if (page == PAGE_DEADZONE || page == PAGE_AUTOFIRE) dirty = true;
     }
     if (mouse_dbg_dirty_requested) {
         mouse_dbg_dirty_requested = false;
@@ -850,6 +997,11 @@ void UserInterface::update() {
         case PAGE_DEADZONE:
             ssd1306_clear(&disp);
             update_deadzone();
+            break;
+
+        case PAGE_AUTOFIRE:
+            ssd1306_clear(&disp);
+            update_autofire();
             break;
 
         case PAGE_HELP_1:

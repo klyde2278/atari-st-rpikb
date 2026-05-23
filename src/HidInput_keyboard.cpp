@@ -35,6 +35,11 @@ extern UserInterface* ui_;
 extern uint8_t current_led_state;
 extern const uint8_t* s_current_lookup;
 
+// Per-device last LED byte successfully queued (0xFF = never sent to this device).
+// A std::map is used so that newly plugged keyboards automatically get 0xFF
+// (treated as "unknown") the first time handle_keyboard() sees their address.
+static std::map<int, uint8_t> dev_last_led;
+
 extern ssd1306_t disp;
 
 // ---------------------------------------------------------------------------
@@ -211,14 +216,17 @@ static const char* hid_keycode_to_label(uint8_t hk) {
 }
 
 
+// Called from tuh_hid_unmounted_cb (HidInput_common.cpp) on keyboard unplug.
+// Clears per-device LED state so the next keyboard at the same address
+// gets a fresh send on its first report cycle.
+void hid_keyboard_on_unmount(int dev_addr) {
+    dev_last_led.erase(dev_addr);
+}
+
 void HidInput::handle_keyboard()
 {
     bool any_polled    = false;
     bool any_key_found = false;
-
-    // Tracks the last LED state successfully sent to avoid redundant SET_REPORT
-    // calls. Initialised to 0xFF so the first call always triggers a send.
-    static uint8_t last_sent_led = 0xFF;
 
     for (auto& it : device) {
         if (tuh_hid_get_type(it.first) != HID_KEYBOARD) continue;
@@ -350,15 +358,25 @@ void HidInput::handle_keyboard()
         key_states[ATARI_CTRL]   = ctrl_down ? 1 : 0;
         key_states[ATARI_ALT]    = alt_down  ? 1 : 0;
 
-        // Send LED update only when the state has actually changed.
-        // Using the device's real instance avoids invalid SET_REPORT calls
-        // and prevents flooding the control pipe at 100 Hz.
-        if (current_led_state != last_sent_led) {
-            uint8_t instance = tuh_hid_get_instance((uint8_t)it.first);
-            if (tuh_hid_set_report((uint8_t)it.first, instance, 0,
-                    HID_REPORT_TYPE_OUTPUT,
-                    &current_led_state, sizeof(current_led_state))) {
-                last_sent_led = current_led_state;
+        // Send LED update when state changed or not yet sent to this device.
+        // Per-device tracking (dev_last_led) fixes the multi-keyboard case where
+        // a single shared static would suppress the LED send for the second keyboard.
+        // hid_app_get_kb_led_rid() returns the report ID confirmed by the probe in
+        // tuh_hid_set_protocol_complete_cb(); defaults to 0 while probing.
+        {
+            auto it_led = dev_last_led.find(it.first);
+            uint8_t last_led = (it_led != dev_last_led.end()) ? it_led->second : 0xFF;
+
+            if (current_led_state != last_led) {
+                uint8_t instance = tuh_hid_get_instance((uint8_t)it.first);
+                uint8_t rid = hid_app_get_kb_led_rid((uint8_t)it.first);
+                if (rid == 0xFF) rid = 0;  // probe not done yet: try default
+
+                if (tuh_hid_set_report((uint8_t)it.first, instance, rid,
+                        HID_REPORT_TYPE_OUTPUT,
+                        &current_led_state, sizeof(current_led_state))) {
+                    dev_last_led[it.first] = current_led_state;
+                }
             }
         }
 

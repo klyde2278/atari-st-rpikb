@@ -160,6 +160,9 @@ const char* HidInput::get_layout_name(unsigned ui_index)
 // ---------------------------------------------------------------------------
 // TinyUSB host callbacks
 // ---------------------------------------------------------------------------
+// Defined in HidInput_keyboard.cpp — clears per-device LED tracking on unplug.
+extern void hid_keyboard_on_unmount(int dev_addr);
+
 extern "C" {
 
 void tuh_hid_mounted_cb(uint8_t dev_addr) {
@@ -178,22 +181,9 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
             device[actual_addr] = new uint8_t[sizeof(hid_keyboard_report_t)];
             hid_app_request_report(actual_addr, device[actual_addr]);
             ++kb_count;
-            // Brief delay then clear all LEDs before applying the default state.
-            sleep_ms(100);
-            uint8_t led_off = 0x00;
-            for (uint8_t idx = 0; idx < 3; idx++) {
-                tuh_hid_set_report(actual_addr, idx, 0,
-                    HID_REPORT_TYPE_OUTPUT, &led_off, sizeof(led_off));
-            }
-            sleep_ms(50);
-            // Enable NumLock LED only.
-            uint8_t led_on = 0x01;
-            for (uint8_t idx = 0; idx < 3; idx++) {
-                if (tuh_hid_set_report(actual_addr, idx, 0,
-                        HID_REPORT_TYPE_OUTPUT, &led_on, sizeof(led_on))) {
-                    break;
-                }
-            }
+            // NumLock LED is set in tuh_hid_set_protocol_complete_cb() (hid_app_host.c),
+            // called by TinyUSB once SET_PROTOCOL finishes and EP0 is free.
+            // Any attempt here would fail: SET_PROTOCOL is still pending inside tuh_task().
         }
     }
     else if (tp == HID_MOUSE) {
@@ -223,7 +213,10 @@ else if (tp == HID_JOYSTICK) {
 
 void tuh_hid_unmounted_cb(uint8_t dev_addr) {
     HID_TYPE tp = tuh_hid_get_type(dev_addr);
-    if      (tp == HID_KEYBOARD) --kb_count;
+    if (tp == HID_KEYBOARD) {
+        hid_keyboard_on_unmount(dev_addr);
+        --kb_count;
+    }
     else if (tp == HID_MOUSE)    --mouse_count;
     else if (tp == HID_JOYSTICK) {
         hid_joystick_release_slot(dev_addr);

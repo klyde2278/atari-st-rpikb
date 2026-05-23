@@ -70,9 +70,25 @@ void NVSettings::read() {
      }
 	// MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
 	if (storage.settings.joystick_dead_zone == 0xFF) {
-		storage.settings.joystick_dead_zone = 0x08; // 0x08
+		storage.settings.joystick_dead_zone = 0x08;
 		write();
 	}
+
+	// MIGRATION: autofire fields — default to STANDBY OFF, 8 Hz
+	bool af_dirty = false;
+	if (storage.settings.autofire_mode_joy0 == 0xFF) {
+		storage.settings.autofire_mode_joy0 = 0; af_dirty = true;
+	}
+	if (storage.settings.autofire_mode_joy1 == 0xFF) {
+		storage.settings.autofire_mode_joy1 = 0; af_dirty = true;
+	}
+	if (storage.settings.autofire_rate_joy0 == 0 || storage.settings.autofire_rate_joy0 == 0xFF) {
+		storage.settings.autofire_rate_joy0 = 8; af_dirty = true;
+	}
+	if (storage.settings.autofire_rate_joy1 == 0 || storage.settings.autofire_rate_joy1 == 0xFF) {
+		storage.settings.autofire_rate_joy1 = 8; af_dirty = true;
+	}
+	if (af_dirty) write();
 
    }
 }

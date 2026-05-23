@@ -67,6 +67,10 @@ HID_TYPE hid_debug_get_last_hid_type(void);
 // Returns the HID instance number for the given device address.
 uint8_t tuh_hid_get_instance(uint8_t dev_addr);
 
+// Returns the confirmed LED output report ID for a keyboard (0xFF = not yet known).
+// Discovered automatically by tuh_hid_set_protocol_complete_cb / set_report_complete_cb.
+uint8_t hid_app_get_kb_led_rid(uint8_t dev_addr);
+
 #ifdef __cplusplus
 }
 #endif

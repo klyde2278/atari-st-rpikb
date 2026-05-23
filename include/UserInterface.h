@@ -32,17 +32,26 @@
 #define JOY_DZ_MAX    15
 #define JOY_DZ_DEFAULT 8
 
+// Autofire rate range (Hz). Stored directly as 1..AUTOFIRE_MAX.
+// 15 steps match the 15-position slider exactly.
+#define AUTOFIRE_MIN      1
+#define AUTOFIRE_MAX     15
+#define AUTOFIRE_DEFAULT  8
+
 // Custom cursor glyph redefined in the font at address 0x88.
 // Used in front of the currently selected item on any menu or list page.
 #define UI_CURSOR_GLYPH  ((char)0x88)
 
 // Number of entries in each menu (must stay in sync with the string arrays
 // defined in update_menu1 / update_menu2).
-#define MENU1_COUNT  4   // Back | Settings | Help | Debug
+#define MENU1_COUNT  5   // Back | Autofire | Settings   | Help    | Debug
 #define MENU2_COUNT  4   // Back | Language | Kbd Layout | Deadzone
 
-// Vertical spacing (pixels) between menu entries on MENU_1 / MENU_2.
-#define MENU_LINE_H  14
+// Vertical spacing (pixels) between menu entries.
+// MENU1 has 4 entries: 4 x 14 = 56 px < 64 px display height.
+// MENU2 has 5 entries: 5 x 12 = 60 px < 64 px.
+#define MENU1_LINE_H 12
+#define MENU2_LINE_H 14
 
 class UserInterface {
 public:
@@ -65,6 +74,9 @@ public:
         PAGE_LANGUAGE,
         PAGE_LAYOUT,
         PAGE_DEADZONE,
+
+        // Autofire settings page (reached from PAGE_MENU_1)
+        PAGE_AUTOFIRE,
 
         // Help pages (reached from PAGE_MENU_1)
         PAGE_HELP_1,
@@ -103,6 +115,18 @@ public:
      * Get the user-specified joystick dead zone.
      */
     uint8_t get_dead_zone();
+
+    /**
+     * Get the autofire mode for the given joystick (0 = OFF, 1 = STANDBY).
+     * @param joy  0 or 1
+     */
+    uint8_t get_autofire_mode(int joy);
+
+    /**
+     * Get the autofire rate (Hz) for the given joystick (AUTOFIRE_MIN..AUTOFIRE_MAX).
+     * @param joy  0 or 1
+     */
+    uint8_t get_autofire_rate(int joy);
 
     /**
      * Returns true if mouse is enabled, false if joystick 0 is enabled.
@@ -152,6 +176,11 @@ public:
     void update_help_2();
 
     /**
+     * Render the autofire settings page.
+     */
+    void update_autofire();
+
+    /**
      * Force a jump to the USB debug page (e.g. via Ctrl+F8).
      */
     void show_usb_debug_page();
@@ -197,10 +226,12 @@ private:
 
     // Currently highlighted joystick on PAGE_JOY (0 = Joy0, 1 = Joy1)
     int         joy_selected   = 0;
-    // Currently highlighted entry on PAGE_MENU_1 (0 = Back, 1 = Settings, 2 = Help, 3 = Debug)
+    // Currently highlighted entry on PAGE_MENU_1 (0=Back,1=Settings,2=Help,3=Debug)
     int         menu1_selected = 0;
-    // Currently highlighted entry on PAGE_MENU_2 (0 = Back, 1 = Language, 2 = Kbd Layout, 3 = Deadzone)
+    // Currently highlighted entry on PAGE_MENU_2 (0=Back,1=Language,2=Kbd Layout,3=Deadzone,4=Autofire)
     int         menu2_selected = 0;
+    // Currently selected item on PAGE_AUTOFIRE (0=J1 mode,1=J1 rate,2=J0 mode,3=J0 rate)
+    int         autofire_selected = 0;
 
     // Mouse movement delta accumulated between two render frames (PAGE_MOUSE_DEBUG).
     // Set by set_mouse_debug_delta(), cleared after each call to update_mouse_debug().

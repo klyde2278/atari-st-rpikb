@@ -45,6 +45,14 @@ struct Settings {
 	
 	// Joystick dead zone value
 	uint8_t joystick_dead_zone;
+
+	// Autofire mode per joystick: 0 = OFF, 1 = STANDBY
+	uint8_t autofire_mode_joy0;
+	uint8_t autofire_mode_joy1;
+
+	// Autofire rate per joystick: 1..AUTOFIRE_MAX Hz
+	uint8_t autofire_rate_joy0;
+	uint8_t autofire_rate_joy1;
 };
 
 class NVSettings {

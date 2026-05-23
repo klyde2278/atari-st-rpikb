@@ -24,6 +24,7 @@
 #include <string>
 #include <cstddef>
 #include "UserInterface.h"
+#include "pico/time.h"
 
 enum class KeyboardLayout {
     CZ_CZ,
@@ -103,10 +104,22 @@ public:
      */
     const char* get_last_key_label() const { return last_key_label; }
 
+    /**
+     * Return true if autofire is currently active (firing) for the given joystick.
+     * @param joy  0 or 1
+     */
+    bool is_autofire_active(int joy) const {
+        return (joy >= 0 && joy < 2) && autofire_active[joy];
+    }
+
 private:
     bool get_usb_joystick(int addr, uint8_t& axis, uint8_t& button);
     bool get_xbox_joystick(int joystick_num, uint8_t& axis, uint8_t& button);
     bool get_ps4_joystick(int joystick_num, uint8_t& axis, uint8_t& button);
+
+    // Applies autofire logic for the given joystick port.
+    // Returns the effective fire state (raw fire OR autofire pulse).
+    bool process_autofire(int joy, bool raw_fire);
 
 private:
     std::vector<unsigned char> key_states;
@@ -115,7 +128,8 @@ private:
     int            joystick_handle    =-1;
     int            mouse_state        = 0;
     int            usb_mouse_buttons  = 0;  // last known USB mouse button state (persists between reports)
-    uint8_t        usb_joy_fire       = 0;  // last known USB joystick fire state: bit0=Joy1, bit1=Joy0
+    uint8_t        usb_joy_fire       = 0;  // effective USB joystick fire (after autofire): bit0=Joy1, bit1=Joy0
+    uint8_t        usb_joy_raw_fire   = 0;  // last known raw USB joystick fire (before autofire): bit0=Joy1, bit1=Joy0
 	unsigned char  joystick_state     = 0;
     int            mouse_overlay_fire = 0;
     bool           mouse_en           = true;
@@ -124,6 +138,20 @@ private:
     // Cleared to "" when no key is held. Written by handle_keyboard(),
     // read by UserInterface::update_mouse_debug() via get_last_key_label().
     char last_key_label[8] = {};
+
+    // --- Autofire runtime state (not persisted) ---
+    // autofire_active: true = autofire currently pulsing
+    bool            autofire_active[2]        = {};
+    // autofire_hold_tracking: true = fire button held, measuring duration
+    bool            autofire_hold_tracking[2] = {};
+    // autofire_wait_release: true = waiting for button release after a mode toggle
+    bool            autofire_wait_release[2]  = {};
+    // Time at which the current hold started
+    absolute_time_t autofire_hold_start[2]    = {};
+    // Last phase-change timestamp for the pulse generator
+    absolute_time_t autofire_phase_tm[2]      = {};
+    // Current pulse generator output (true = fire ON)
+    bool            autofire_phase_state[2]   = {};
 };
 
 // ---------------------------------------------------------------------------

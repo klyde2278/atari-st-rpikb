@@ -109,31 +109,17 @@ The user interface has several pages that are rotated between by pressing the mi
 
 The real ST keyboard has a single DB-9 socket which is shared between the mouse and Joystick 0. The emulator allows you to have a USB mouse and a DB-9 joystick plugged in simultaneously but you need to select whether the USB mouse or the DB-9 joystick is active. This can be toggled by using the Ctrl + F12 shortcut on the keyboard any time.
 
-4. The different pages can be accessed through different menus.
-
-   <img src="menu1.png" alt="Menu" style="width: 300px; height: auto;">
-
-6. Language selection page. Available languages are: English, French, German, Spanish, Italian.
+4. Language selection page. Available languages are: English, French, German, Spanish, Italian.
 
     <img src="language.png" alt="Language page" style="width: 300px; height: auto;">
 
-8. USB Joystick dead zone settings page. The joystick dead zone can be tested.
+5. USB Joystick dead zone settings page. The joystick dead zone can be tested.
 
    <img src="deadzone.png" alt="Dead zone" style="width: 300px; height: auto;">
 
-6. Help page one. Shows the first page of shortcuts for this firmware version.
+6. Keyboard mapping page. The USB keyboard can be remapped to match the Atari ST keys
 
-    <img src="Help1.png" alt="Help page 1" style="width: 300px; height: auto;">
-
-7. Help page two. Shows the second page of shortcuts for this firmware version.
-
-    <img src="help2.png" alt="Help page 2" style="width: 300px; height: auto;">
-
-8. Serial data Tx/Rx between emulator and Atari. Data received from the Atari is on the left, data sent to the Atari is on the right.
    
-   <img src="Debug1.png" alt="Serial page" style="width: 300px; height: auto;">
-
-The serial data page should only be used for ensuring the connection works. Displaying the page slows down the emulator and you may seem some mouse lag whilst it is active.
 
 ## Keyboard Shortcuts
 
@@ -148,7 +134,7 @@ The emulator supports several keyboard shortcuts for convenient control:
 | **Alt+Keypad Plus** | Set 270MHz | Overclocks RP2040 CPU to 270MHz for maximum performance |
 | **Alt+Keypad Minus** | Set 150MHz | Sets RP2040 CPU to 150MHz for stability |
 
-For detailed information about keyboard shortcuts, see [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).
+For detailed information about keyboard shortcuts, see [KEYBOARD_SHORTCUTS.md](/docs/KEYBOARD_SHORTCUTS.md).
 
 ## USB Controller Support
 

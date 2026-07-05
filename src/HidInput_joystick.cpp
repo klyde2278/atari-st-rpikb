@@ -29,6 +29,11 @@
 extern std::map<int, uint8_t*> device;
 extern UserInterface* ui_;
 
+// Snapshots read by core 1 (defined in HidInput_common.cpp).
+extern volatile uint8_t g_joystick_snapshot;
+extern volatile uint8_t g_mouse_buttons_snapshot;
+extern volatile uint8_t g_mouse_enabled_snapshot;
+
 // ---------------------------------------------------------------------------
 // USB joystick address list.
 //
@@ -85,6 +90,13 @@ static inline int32_t deadzone_threshold_s16(uint8_t dz_setting)
 {
     // Scale 0..0x10 into the signed 16-bit half-range 0..32767.
     return (int32_t)dz_setting * 32767 / 0x10;
+}
+
+static inline int16_t deadzone_threshold_ps4(uint8_t dz_setting)
+{
+    // Scale 0..0x10 into the PS4 stick half-range 0..127
+    // (same proportional mapping as the s16 analog path).
+    return (int16_t)((int32_t)dz_setting * 127 / 0x10);
 }
 
 static inline bool in_deadzone_u8(uint32_t value, int threshold)
@@ -161,19 +173,23 @@ bool HidInput::get_usb_joystick(int addr, uint8_t& axis, uint8_t& button)
 
 // ---------------------------------------------------------------------------
 // PS4 joystick reader.
+//
+// Port mapping follows the same connection-order convention as USB HID
+// joysticks (s_usb_joy): 1st connected pad -> Joy1, 2nd -> Joy0.
+// The UI dead zone setting is propagated to the controller on every poll,
+// scaled to the PS4 stick half-range.
 // ---------------------------------------------------------------------------
 bool HidInput::get_ps4_joystick(int joystick_num, uint8_t& axis, uint8_t& button)
 {
-    const uint8_t dz_setting = ui_ ? ui_->get_dead_zone() : 0x08;
+    ps4_controller_t* ps4 =
+        ps4_get_controller_by_index((joystick_num == 1) ? 0 : 1);
+    if (!ps4) return false;
 
-    for (uint8_t dev_addr = 1; dev_addr < 8; dev_addr++) {
-        ps4_controller_t* ps4 = ps4_get_controller(dev_addr);
-        if (ps4 && ps4->connected) {
-            ps4_to_atari(ps4, joystick_num, &axis, &button, dz_setting);
-            return true;
-        }
-    }
-    return false;
+    const uint8_t dz_setting = ui_ ? ui_->get_dead_zone() : 0x08;
+    ps4->deadzone = deadzone_threshold_ps4(dz_setting);
+
+    ps4_to_atari(ps4, &axis, &button);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,4 +397,10 @@ void HidInput::handle_joystick()
             }
         }
     }
+
+    // Publish the results for core 1: the HD6301 emulation reads these
+    // snapshots from dr2_getb/dr4_getb instead of calling into HidInput.
+    g_joystick_snapshot      = joystick_state;
+    g_mouse_buttons_snapshot = (uint8_t)mouse_state;
+    g_mouse_enabled_snapshot = ui_ ? (ui_->get_mouse_enabled() ? 1 : 0) : 1;
 }

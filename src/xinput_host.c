@@ -8,6 +8,7 @@
 #include "host/usbh.h"
 #include "host/usbh_pvt.h"
 #include "xinput_host.h"
+#include "hardware/timer.h"   // time_us_32() for the bounded TX wait
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
@@ -112,10 +113,20 @@ static uint8_t get_instance_id_by_itfnum(uint8_t dev_addr, uint8_t itf)
     return 0xff;
 }
 
+// Upper bound for waiting on an interrupt OUT transfer. A controller that
+// stalls or is unplugged mid-transfer would otherwise spin here forever,
+// blocking core 0 until the watchdog reboots.
+#define XINPUT_TX_TIMEOUT_US (100u * 1000u)
+
 static void wait_for_tx_complete(uint8_t dev_addr, uint8_t ep_out)
 {
+    uint32_t start = time_us_32();
     while (usbh_edpt_busy(dev_addr, ep_out))
+    {
+        if ((uint32_t)(time_us_32() - start) > XINPUT_TX_TIMEOUT_US)
+            return;  // give up: the next endpoint claim will fail gracefully
         tuh_task();
+    }
 }
 
 static void xboxone_init( xinputh_interface_t *xid_itf, uint8_t dev_addr, uint8_t instance)
@@ -497,7 +508,7 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
                 if (wButtons & (1 << 5)) pad->wButtons |= XINPUT_GAMEPAD_B;
                 if (wButtons & (1 << 6)) pad->wButtons |= XINPUT_GAMEPAD_X;
                 if (wButtons & (1 << 7)) pad->wButtons |= XINPUT_GAMEPAD_Y;
-                if (rdata[22] && 0x01) pad->wButtons   |= XINPUT_GAMEPAD_SHARE;
+                if (rdata[22] & 0x01) pad->wButtons    |= XINPUT_GAMEPAD_SHARE;
 
                 //Map the left and right triggers
                 pad->bLeftTrigger = (rdata[7] << 8 | rdata[6]) >> 2;

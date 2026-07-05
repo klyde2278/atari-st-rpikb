@@ -18,6 +18,7 @@
 */
 
 #include "NVSettings.h"
+#include "pico/multicore.h"
 #include <hardware/sync.h>
 #include <string.h>
 
@@ -31,8 +32,6 @@ static union {
 } storage;
 
 NVSettings::NVSettings() {
-    // NV settings disabled for now as the RP2040 seems to crash if you write flash with
-    // interrupts enabled or disabled.
     read();
 }
 
@@ -41,10 +40,20 @@ Settings& NVSettings::get_settings() {
 }
 
 void NVSettings::write() {
+    // While the sector is erased/programmed the flash is unreadable, so no
+    // code may execute from XIP. Core 1 runs the HD6301 emulation from
+    // flash: park it in its multicore-lockout RAM handler for the duration.
+    // Boot-time migration writes happen before core 1 is launched; the
+    // victim check makes them skip the (otherwise blocking) lockout.
+    // NOTE: the write costs ~50 ms with interrupts off on this core; callers
+    // should defer/coalesce writes (see UserInterface::schedule_settings_write).
+    bool lockout = multicore_lockout_victim_is_initialized(1);
+    if (lockout) multicore_lockout_start_blocking();
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_LOCATION, FLASH_SECTOR_SIZE);
     flash_range_program(FLASH_LOCATION, &storage.raw[0], FLASH_SECTOR_SIZE);
     restore_interrupts(ints);
+    if (lockout) multicore_lockout_end_blocking();
 }
 
 void NVSettings::read() {
@@ -61,35 +70,41 @@ void NVSettings::read() {
         write();
     }
     else {
-     // MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
-     // Note: on previously-written v1 settings, 'keyboard_layout_index' didn't exist yet
-     // and may read back as 0xFF from flash. Fix it once and persist.
-     if (storage.settings.keyboard_layout_index == 0xFF) {
-       storage.settings.keyboard_layout_index = 0; // CZ by default
-       write();
-     }
-	// MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
-	if (storage.settings.joystick_dead_zone == 0xFF) {
-		storage.settings.joystick_dead_zone = 0x08;
-		write();
-	}
+		 // MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
+		 // Note: on previously-written v1 settings, 'keyboard_layout_index' didn't exist yet
+		 // and may read back as 0xFF from flash. Fix it once and persist.
+		 if (storage.settings.keyboard_layout_index == 0xFF) {
+		   storage.settings.keyboard_layout_index = 0; // CZ by default
+		   write();
+		 }
+		// MIGRATION / SANITY: if the new field is uninitialized (0xFF), set a safe default
+		if (storage.settings.joystick_dead_zone == 0xFF) {
+			storage.settings.joystick_dead_zone = 0x08;
+			write();
+		}
 
-	// MIGRATION: autofire fields — default to STANDBY OFF, 8 Hz
-	bool af_dirty = false;
-	if (storage.settings.autofire_mode_joy0 == 0xFF) {
-		storage.settings.autofire_mode_joy0 = 0; af_dirty = true;
-	}
-	if (storage.settings.autofire_mode_joy1 == 0xFF) {
-		storage.settings.autofire_mode_joy1 = 0; af_dirty = true;
-	}
-	if (storage.settings.autofire_rate_joy0 == 0 || storage.settings.autofire_rate_joy0 == 0xFF) {
-		storage.settings.autofire_rate_joy0 = 8; af_dirty = true;
-	}
-	if (storage.settings.autofire_rate_joy1 == 0 || storage.settings.autofire_rate_joy1 == 0xFF) {
-		storage.settings.autofire_rate_joy1 = 8; af_dirty = true;
-	}
-	if (af_dirty) write();
+		// MIGRATION: autofire fields — default to STANDBY OFF, 8 Hz
+		bool af_dirty = false;
+		if (storage.settings.autofire_mode_joy0 == 0xFF) {
+			storage.settings.autofire_mode_joy0 = 0; af_dirty = true;
+		}
+		if (storage.settings.autofire_mode_joy1 == 0xFF) {
+			storage.settings.autofire_mode_joy1 = 0; af_dirty = true;
+		}
+		if (storage.settings.autofire_rate_joy0 == 0 || storage.settings.autofire_rate_joy0 == 0xFF) {
+			storage.settings.autofire_rate_joy0 = 8; af_dirty = true;
+		}
+		if (storage.settings.autofire_rate_joy1 == 0 || storage.settings.autofire_rate_joy1 == 0xFF) {
+			storage.settings.autofire_rate_joy1 = 8; af_dirty = true;
+		}
+		if (af_dirty) write();
 
+		// MIGRATION: key_remap — zero-fill if uninitialized (0xFF from blank flash).
+		// UserInterface::init() will copy the active layout table on first valid boot.
+		if (storage.settings.key_remap[4] == 0xFF) {
+			memset(storage.settings.key_remap, 0, sizeof(storage.settings.key_remap));
+			write();
+		}
    }
 }
 

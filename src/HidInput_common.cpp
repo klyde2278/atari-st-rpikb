@@ -42,119 +42,72 @@ int mouse_count            = 0;
 int joy_count              = 0;
 uint8_t current_led_state  = 0x01;   // NumLock ON by default
 const uint8_t* s_current_lookup = nullptr;
+// Active remap table: pointer to Settings::key_remap[]. When non-null, used
+// in place of s_current_lookup for HID->ST scancode translation.
+const uint8_t* s_remap_table = nullptr;
 
 // ---------------------------------------------------------------------------
-// Forward-declare every layout table.
-// To add a new layout: add its extern here and one entry in s_layout_map[].
+// Snapshots for core 1 (HD6301 emulation).
+// The emulator polls joystick/mouse state from dr2_getb/dr4_getb on core 1.
+// It must never call into HidInput/TinyUSB itself: the device map, report
+// buffers and autofire state are owned by core 0 (main loop + 50 ms timer),
+// and a USB mount/unmount during such a call would corrupt them.
+// Instead core 0 publishes these single-byte snapshots at the end of every
+// handle_joystick() cycle; core 1 only reads them (atomic byte accesses).
+// ---------------------------------------------------------------------------
+volatile uint8_t g_joystick_snapshot      = 0;
+volatile uint8_t g_mouse_buttons_snapshot = 0;
+volatile uint8_t g_mouse_enabled_snapshot = 1;
+
+// ---------------------------------------------------------------------------
+// Single HID->ST scancode lookup table (position-based, layout-independent).
 // ---------------------------------------------------------------------------
 extern "C" {
-    extern const uint8_t st_key_lookup_hid_cz_cz[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_de_ch[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_de_de[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_dk_dk[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_en_uk[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_en_us[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_es_es[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_fi_fi[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_fr_ch[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_fr_fr[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_hu_hu[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_it_it[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_nl_nl[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_no_no[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_pl_pl[ST_KEY_LOOKUP_SIZE];
-    extern const uint8_t st_key_lookup_hid_se_se[ST_KEY_LOOKUP_SIZE];
+    extern const uint8_t st_key_lookup_hid[ST_KEY_LOOKUP_SIZE];
 }
 
-// ---------------------------------------------------------------------------
-// Table-driven layout registry.
-//
-// Each entry maps a KeyboardLayout enum value to its HID->ST scancode lookup
-// table and a short display name for the UI.
-//
-// Improvement over the original code: adding a new language requires only a
-// new extern above and one new line here. The previous approach required
-// changes in three separate places: the extern block, map_index_to_layout(),
-// and the switch statement in set_layout().
-// ---------------------------------------------------------------------------
-struct LayoutEntry {
-    KeyboardLayout  layout;
-    const uint8_t*  table;
-    const char*     name;   // Short label shown in the UI
-};
+static const uint8_t* s_default_lookup = st_key_lookup_hid;
 
-static const LayoutEntry s_layout_map[] = {
-    { KeyboardLayout::CZ_CZ, st_key_lookup_hid_cz_cz, "CZ"   },
-    { KeyboardLayout::DE_CH, st_key_lookup_hid_de_ch, "DE-CH" },
-    { KeyboardLayout::DE_DE, st_key_lookup_hid_de_de, "DE"    },
-    { KeyboardLayout::DK_DK, st_key_lookup_hid_dk_dk, "DK"    },
-    { KeyboardLayout::EN_UK, st_key_lookup_hid_en_uk, "EN-UK" },
-    { KeyboardLayout::EN_US, st_key_lookup_hid_en_us, "EN-US" },
-    { KeyboardLayout::ES_ES, st_key_lookup_hid_es_es, "ES"    },
-    { KeyboardLayout::FI_FI, st_key_lookup_hid_fi_fi, "FI"    },
-    { KeyboardLayout::FR_CH, st_key_lookup_hid_fr_ch, "FR-CH" },
-    { KeyboardLayout::FR_FR, st_key_lookup_hid_fr_fr, "FR"    },
-    { KeyboardLayout::HU_HU, st_key_lookup_hid_hu_hu, "HU"    },
-    { KeyboardLayout::IT_IT, st_key_lookup_hid_it_it, "IT"    },
-    { KeyboardLayout::NL_NL, st_key_lookup_hid_nl_nl, "NL"    },
-    { KeyboardLayout::NO_NO, st_key_lookup_hid_no_no, "NO"    },
-    { KeyboardLayout::PL_PL, st_key_lookup_hid_pl_pl, "PL"    },
-    { KeyboardLayout::SE_SE, st_key_lookup_hid_se_se, "SE"    },
-};
-static constexpr size_t s_layout_count =
-    sizeof(s_layout_map) / sizeof(s_layout_map[0]);
-
-// Fallback used when a layout value is not found in the table.
-static const uint8_t* s_default_lookup = st_key_lookup_hid_en_us;
-
-// ---------------------------------------------------------------------------
-// set_layout() — select the active scancode lookup table.
-//
-// Replaces the original switch/case with a linear search over s_layout_map[].
-// Falls back to EN-US for unknown values.
-// ---------------------------------------------------------------------------
-void HidInput::set_layout(KeyboardLayout l)
+void HidInput::set_layout(KeyboardLayout)
 {
-    for (size_t i = 0; i < s_layout_count; ++i) {
-        if (s_layout_map[i].layout == l) {
-            s_current_lookup = s_layout_map[i].table;
-            return;
-        }
-    }
-    s_current_lookup = s_default_lookup;
+    s_current_lookup = st_key_lookup_hid;
 }
 
-// ---------------------------------------------------------------------------
-// set_layout_from_index() — select layout by UI list index.
-//
-// The index directly addresses s_layout_map[], so the UI order and the
-// internal order are always in sync without a separate mapping function.
-// ---------------------------------------------------------------------------
-void HidInput::set_layout_from_index(unsigned ui_index)
+void HidInput::set_layout_from_index(unsigned)
 {
-    if (ui_index < s_layout_count) {
-        set_layout(s_layout_map[ui_index].layout);
-    } else {
-        set_layout(KeyboardLayout::EN_US);
-    }
+    s_current_lookup = st_key_lookup_hid;
 }
 
-// ---------------------------------------------------------------------------
-// Layout metadata accessors.
-// Allow the UI to populate its list without duplicating layout names
-// or coupling to the internal enum order.
-// ---------------------------------------------------------------------------
 size_t HidInput::get_layout_count()
 {
-    return s_layout_count;
+    return 1;
 }
 
 const char* HidInput::get_layout_name(unsigned ui_index)
 {
-    if (ui_index < s_layout_count) {
-        return s_layout_map[ui_index].name;
-    }
-    return "??";
+    return (ui_index == 0) ? "HID" : "??";
+}
+
+const uint8_t* HidInput::get_layout_table(unsigned)
+{
+    return st_key_lookup_hid;
+}
+
+void HidInput::set_remap_table(const uint8_t* tbl)
+{
+    s_remap_table = tbl;
+}
+
+void HidInput::set_capture_mode(bool active)
+{
+    capture_mode_active  = active;
+    captured_hid_keycode = 0;
+    if (!active) last_key_label[0] = '\0';
+}
+
+uint8_t HidInput::get_captured_hid_keycode() const
+{
+    return captured_hid_keycode;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +115,19 @@ const char* HidInput::get_layout_name(unsigned ui_index)
 // ---------------------------------------------------------------------------
 // Defined in HidInput_keyboard.cpp — clears per-device LED tracking on unplug.
 extern void hid_keyboard_on_unmount(int dev_addr);
+
+// All report buffers share this size: tuh_hid_report_received_cb() in
+// hid_app_host.c copies up to 64 bytes into the destination buffer regardless
+// of the parsed report size, so smaller allocations (e.g.
+// sizeof(hid_keyboard_report_t)) could be overflowed by devices whose
+// transfers exceed the boot-protocol layout.
+#define HID_REPORT_BUF_LEN 64
+
+// HID type of each device-map entry, recorded at mount time. Used on unmount
+// to decrement the right counter: tuh_hid_get_type() cannot be used there
+// because it only reflects the last interface still mounted, which is wrong
+// for combo keyboard+mouse devices.
+static std::map<int, HID_TYPE> device_type;
 
 extern "C" {
 
@@ -178,7 +144,8 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
 
     if (tp == HID_KEYBOARD) {
         if (device.find(actual_addr) == device.end()) {
-            device[actual_addr] = new uint8_t[sizeof(hid_keyboard_report_t)];
+            device[actual_addr] = new uint8_t[HID_REPORT_BUF_LEN];
+            device_type[actual_addr] = HID_KEYBOARD;
             hid_app_request_report(actual_addr, device[actual_addr]);
             ++kb_count;
             // NumLock LED is set in tuh_hid_set_protocol_complete_cb() (hid_app_host.c),
@@ -188,22 +155,29 @@ void tuh_hid_mounted_cb(uint8_t dev_addr) {
     }
     else if (tp == HID_MOUSE) {
         if (device.find(actual_addr) == device.end()) {
-            device[actual_addr] = new uint8_t[tuh_hid_get_report_size(actual_addr)];
+            device[actual_addr] = new uint8_t[HID_REPORT_BUF_LEN];
+            device_type[actual_addr] = HID_MOUSE;
             hid_app_request_report(actual_addr, device[actual_addr]);
             ++mouse_count;
         } else {
             // Second mouse or dual-interface device: use addr+128 as the map key.
             int mouse_key = actual_addr + 128;
-            device[mouse_key] = new uint8_t[tuh_hid_get_report_size(actual_addr)];
-            hid_app_request_report(mouse_key, device[mouse_key]);
-            ++mouse_count;
+            if (device.find(mouse_key) == device.end()) {
+                device[mouse_key] = new uint8_t[HID_REPORT_BUF_LEN];
+                device_type[mouse_key] = HID_MOUSE;
+                hid_app_request_report(mouse_key, device[mouse_key]);
+                ++mouse_count;
+            }
         }
     }
-else if (tp == HID_JOYSTICK) {
-        device[actual_addr] = new uint8_t[tuh_hid_get_report_size(actual_addr)];
-        hid_app_request_report(actual_addr, device[actual_addr]);
-        hid_joystick_assign_slot(actual_addr);   // assign to joy1 or joy0
-        ++joy_count;
+    else if (tp == HID_JOYSTICK) {
+        if (device.find(actual_addr) == device.end()) {
+            device[actual_addr] = new uint8_t[HID_REPORT_BUF_LEN];
+            device_type[actual_addr] = HID_JOYSTICK;
+            hid_app_request_report(actual_addr, device[actual_addr]);
+            hid_joystick_assign_slot(actual_addr);   // assign to joy1 or joy0
+            ++joy_count;
+        }
     }
 
     if (ui_) {
@@ -212,20 +186,34 @@ else if (tp == HID_JOYSTICK) {
 }
 
 void tuh_hid_unmounted_cb(uint8_t dev_addr) {
-    HID_TYPE tp = tuh_hid_get_type(dev_addr);
-    if (tp == HID_KEYBOARD) {
-        hid_keyboard_on_unmount(dev_addr);
-        --kb_count;
-    }
-    else if (tp == HID_MOUSE)    --mouse_count;
-    else if (tp == HID_JOYSTICK) {
-        hid_joystick_release_slot(dev_addr);
-		--joy_count;
-    }
-    auto it = device.find(dev_addr);
-    if (it != device.end()) {
+    // Release both possible map entries for this address: the plain key and
+    // the +128 key used for the mouse interface of combo keyboard+mouse
+    // devices. Counters are decremented from the type recorded at mount time.
+    const int keys[2] = { dev_addr, dev_addr + 128 };
+    for (int key : keys) {
+        auto it = device.find(key);
+        if (it == device.end()) continue;
+
+        auto type_it = device_type.find(key);
+        HID_TYPE tp = (type_it != device_type.end()) ? type_it->second
+                                                     : HID_UNDEFINED;
+        if (tp == HID_KEYBOARD) {
+            hid_keyboard_on_unmount(dev_addr);
+            --kb_count;
+        }
+        else if (tp == HID_MOUSE) {
+            --mouse_count;
+        }
+        else if (tp == HID_JOYSTICK) {
+            hid_joystick_release_slot(dev_addr);
+            --joy_count;
+        }
+
         delete[] it->second;
         device.erase(it);
+        if (type_it != device_type.end()) {
+            device_type.erase(type_it);
+        }
     }
     if (ui_) {
         ui_->usb_connect_state(kb_count, mouse_count, joy_count);
@@ -304,24 +292,23 @@ bool HidInput::mouse_enabled() const {
 }
 
 // ---------------------------------------------------------------------------
-// C wrappers
+// C wrappers — called from the HD6301 emulation on core 1.
+// They only read the snapshots published by core 0 (see comment at the top
+// of this file); they must not call into HidInput/TinyUSB.
 // ---------------------------------------------------------------------------
 unsigned char st_keydown(const unsigned char code) {
+    // Single-byte read from a fixed-size array updated by core 0 — atomic.
     return HidInput::instance().keydown(code);
 }
 
 int st_mouse_buttons() {
-    return HidInput::instance().mouse_buttons();
+    return g_mouse_buttons_snapshot;
 }
 
 unsigned char st_joystick() {
-    return HidInput::instance().joystick();
+    return g_joystick_snapshot;
 }
 
 int st_mouse_enabled() {
-    return HidInput::instance().mouse_enabled() ? 1 : 0;
-}
-
-void update_joystick_state() {
-    HidInput::instance().handle_joystick();
+    return g_mouse_enabled_snapshot;
 }

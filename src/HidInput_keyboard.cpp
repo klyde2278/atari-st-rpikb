@@ -34,6 +34,7 @@ extern std::map<int, uint8_t*> device;
 extern UserInterface* ui_;
 extern uint8_t current_led_state;
 extern const uint8_t* s_current_lookup;
+extern const uint8_t* s_remap_table;
 
 // Per-device last LED byte successfully queued (0xFF = never sent to this device).
 // A std::map is used so that newly plugged keyboards automatically get 0xFF
@@ -65,7 +66,7 @@ extern ssd1306_t disp;
 // System shortcut keycodes (HID usage page 0x07).
 // Centralised here so they are easy to find and change.
 // ---------------------------------------------------------------------------
-static constexpr uint8_t KEY_TOGGLE_MOUSE  = 0x45;  // F12
+static constexpr uint8_t KEY_TOGGLE_MOUSE  = 0x45; // F12
 static constexpr uint8_t KEY_XRESET       = 0x44;  // F11
 static constexpr uint8_t KEY_JOY0_TOGGLE  = 0x42;  // F9
 static constexpr uint8_t KEY_JOY1_TOGGLE  = 0x43;  // F10
@@ -129,7 +130,7 @@ static void one_shot(bool condition, bool& last_state, Fn&& action)
 // labels are string literals.  The function is only called from the main
 // loop (not from an IRQ), so the static buffer is safe on RP2040.
 // ---------------------------------------------------------------------------
-static const char* hid_keycode_to_label(uint8_t hk) {
+const char* hid_keycode_to_label(uint8_t hk) {
     // Letters A–Z: HID 0x04–0x1D in QWERTY order.
     static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     static char single[2] = {0, 0};
@@ -164,7 +165,7 @@ static const char* hid_keycode_to_label(uint8_t hk) {
         case 0x36: return ",";
         case 0x37: return ".";
         case 0x38: return "/";
-        case 0x39: return "Cap";
+        case 0x39: return "CLk";
         // Function keys.
         case 0x3A: return "F1";
         case 0x3B: return "F2";
@@ -183,7 +184,7 @@ static const char* hid_keycode_to_label(uint8_t hk) {
         case 0x47: return "Scr";
         case 0x48: return "Pau";
         case 0x49: return "Ins";
-        case 0x4A: return "Hm";
+        case 0x4A: return "Hom";
         case 0x4B: return "PU";
         case 0x4C: return "Del";
         case 0x4D: return "End";
@@ -223,10 +224,16 @@ void hid_keyboard_on_unmount(int dev_addr) {
     dev_last_led.erase(dev_addr);
 }
 
+const char* HidInput::get_hid_label(uint8_t hk)
+{
+    return hid_keycode_to_label(hk);
+}
+
 void HidInput::handle_keyboard()
 {
     bool any_polled    = false;
     bool any_key_found = false;
+    bool primary_done  = false;
 
     for (auto& it : device) {
         if (tuh_hid_get_type(it.first) != HID_KEYBOARD) continue;
@@ -235,6 +242,41 @@ void HidInput::handle_keyboard()
         any_polled = true;
 
         auto* kb = reinterpret_cast<hid_keyboard_report_t*>(it.second);
+
+        // --- Capture mode: intercept USB key for remap UI, skip Atari output ---
+        if (capture_mode_active) {
+            uint8_t cap = 0;
+            for (int i = 0; i < 6; ++i) {
+                uint8_t hk = kb->keycode[i];
+                if (hk == 0 || hk >= 128) continue;
+                // Skip system shortcuts — they must remain unavailable for remapping.
+                if (hk >= KEY_JOY0_TOGGLE && hk <= KEY_TOGGLE_MOUSE) continue; // F9-F12
+                if (hk == KEY_KP_SUBTRACT || hk == KEY_KP_ADD) continue;       // KP-/KP+
+                cap = hk;
+                break;
+            }
+            captured_hid_keycode = cap;
+            if (cap) {
+                const char* lbl = hid_keycode_to_label(cap);
+                strncpy(last_key_label, lbl, sizeof(last_key_label) - 1);
+                last_key_label[sizeof(last_key_label) - 1] = '\0';
+                any_key_found = true;
+            } else {
+                last_key_label[0] = '\0';
+            }
+            hid_app_request_report(it.first, it.second);
+            continue;
+        }
+
+        // Only the first mounted keyboard this cycle drives global shortcuts,
+        // Caps Lock and the Atari key output. Additional keyboards are still
+        // polled and LED-updated below, but stay passive: two USB keyboards at
+        // once is not an expected setup, and this keeps the shared edge-detect
+        // statics consistent instead of letting a second keyboard race them.
+        const bool is_primary = !primary_done;
+        primary_done = true;
+
+        if (is_primary) {
         const bool ctrl_down = ctrl_held(kb);
         const bool alt_down  = alt_held(kb);
 
@@ -254,7 +296,10 @@ void HidInput::handle_keyboard()
                 ssd1306_draw_string(&disp, 30, 20, 2, (char*)"RESET");
                 ssd1306_draw_string(&disp, 20, 45, 1, (char*)"Ctrl + F11");
                 ssd1306_show(&disp);
-                sleep_ms(500);
+                // No sleep here: this lambda runs in the main loop and any
+                // delay stalls USB polling and UART RX. The reset is only a
+                // flag read by core 1, so it can be triggered immediately;
+                // the OLED message persists until the next page redraw.
                 hd6301_trigger_reset();
             });
         }
@@ -279,7 +324,8 @@ void HidInput::handle_keyboard()
         {
             static bool last = false;
             one_shot(alt_down && is_key_pressed(kb, KEY_KP_ADD), last, [&]{
-                set_sys_clock_khz(270000, false);
+                // set_cpu_speed() owns the clock change plus the core-voltage
+                // and I2C-baud re-programming; do not change the clock directly.
                 ui_->set_cpu_speed(270000);
             });
         }
@@ -288,7 +334,6 @@ void HidInput::handle_keyboard()
         {
             static bool last = false;
             one_shot(alt_down && is_key_pressed(kb, KEY_KP_SUBTRACT), last, [&]{
-                set_sys_clock_khz(150000, false);
                 ui_->set_cpu_speed(150000);
             });
         }
@@ -332,7 +377,7 @@ void HidInput::handle_keyboard()
                 st_keys[i] = 0;
                 continue;
             }
-            st_keys[i] = s_current_lookup[hk];
+            st_keys[i] = s_remap_table ? s_remap_table[hk] : s_current_lookup[hk];
         }
 
         // -----------------------------------------------------------------------
@@ -357,6 +402,7 @@ void HidInput::handle_keyboard()
         key_states[ATARI_RSHIFT] = (kb->modifier & MOD_RSHIFT) ? 1 : 0;
         key_states[ATARI_CTRL]   = ctrl_down ? 1 : 0;
         key_states[ATARI_ALT]    = alt_down  ? 1 : 0;
+        } // end is_primary: shortcuts / Caps Lock / Atari key state
 
         // Send LED update when state changed or not yet sent to this device.
         // Per-device tracking (dev_last_led) fixes the multi-keyboard case where
@@ -380,16 +426,18 @@ void HidInput::handle_keyboard()
             }
         }
 
-        // Update the debug key label.
-        for (int i = 0; i < 6; ++i) {
-            if (kb->keycode[i] != 0) {
-                any_key_found = true;
-                if (last_key_label[0] == '\0') {
-                    const char* lbl = hid_keycode_to_label(kb->keycode[i]);
-                    strncpy(last_key_label, lbl, sizeof(last_key_label) - 1);
-                    last_key_label[sizeof(last_key_label) - 1] = '\0';
+        // Update the debug key label (primary keyboard only).
+        if (is_primary) {
+            for (int i = 0; i < 6; ++i) {
+                if (kb->keycode[i] != 0) {
+                    any_key_found = true;
+                    if (last_key_label[0] == '\0') {
+                        const char* lbl = hid_keycode_to_label(kb->keycode[i]);
+                        strncpy(last_key_label, lbl, sizeof(last_key_label) - 1);
+                        last_key_label[sizeof(last_key_label) - 1] = '\0';
+                    }
+                    break;
                 }
-                break;
             }
         }
 

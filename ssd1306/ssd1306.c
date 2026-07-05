@@ -216,6 +216,11 @@ static uint32_t utf8_next(const char **ps) {
         (*ps)++;
         return c;
     }
+    // Custom font glyphs in private range 0x80–0x9F (arrows, cursor, etc.)
+    if (c <= 0x9F) {
+        (*ps)++;
+        return c;
+    }
     // 2-byte sequence: 110xxxxx 10xxxxxx
     if ((c & 0xE0) == 0xC0 && (s[1] & 0xC0) == 0x80) {
         uint32_t cp = ((uint32_t)(c & 0x1F) << 6) | (uint32_t)(s[1] & 0x3F);
@@ -239,14 +244,30 @@ static uint32_t utf8_next(const char **ps) {
         (*ps) += 4;
         return cp;
     }
-    // Invalid byte: advance by 1 and return replacement
+    // Bare high byte or invalid sequence: pass through as Latin-1 code point.
+    // Isolated bytes 0xA0..0xFF (raw ISO-8859-1 escapes in label strings) reach
+    // here because they fail the UTF-8 continuation-byte checks above.
+    // unicode_to_font_byte() already maps 0xA0..0xFF to the correct font glyph.
     (*ps)++;
-    return 0xFFFD; // Unicode replacement character
+    return c;
+}
+
+// Count Unicode codepoints in a UTF-8 string (character count, not byte count)
+uint32_t ssd1306_utf8_charlen(const char *s) {
+    uint32_t count = 0;
+    while (s && *s) {
+        utf8_next(&s);
+        ++count;
+    }
+    return count;
 }
 
 // Map a Unicode code point to a single-byte glyph in font_8x5
 // Returns 0 if no direct glyph available (caller may fallback)
 static uint8_t unicode_to_font_byte(uint32_t cp) {
+    // Custom font glyphs in private range 0x80–0x9F (arrows, cursor, sliders…)
+    if (cp >= 0x80 && cp <= 0x9F) return (uint8_t)cp;
+
     // Displayable ASCII
     if (cp >= 0x20 && cp <= 0x7F) return (uint8_t)cp;
 
@@ -351,6 +372,21 @@ void ssd1306_draw_utf8_string_inverse(ssd1306_t *p, uint32_t x, uint32_t y,
 }
 
 void ssd1306_show(ssd1306_t *p) {
+    // Skip the blocking I2C frame transfer (~23 ms for 1 KB at 400 kHz) when the
+    // framebuffer is byte-identical to the one last pushed. The physical panel
+    // only ever changes through this function, so an unchanged buffer is already
+    // displayed. This frees the bulk of core-0 time on static pages and on the
+    // periodically-refreshed debug/deadzone pages whose content did not move.
+    // Single display in this project -> a file-static shadow is sufficient.
+    static uint8_t last_buf[128 * 64 / 8];
+    static size_t  last_len   = 0;
+    static bool    last_valid = false;
+
+    if (last_valid && last_len == p->bufsize &&
+        memcmp(last_buf, p->buffer, p->bufsize) == 0) {
+        return;
+    }
+
     uint8_t payload[]= {SET_COL_ADDR, 0, p->width-1, SET_PAGE_ADDR, 0, p->pages-1};
     if(p->width==64) {
         payload[1]+=32;
@@ -363,4 +399,12 @@ void ssd1306_show(ssd1306_t *p) {
     *(p->buffer-1)=0x40;
 
     fancy_write(p->i2c_i, p->address, p->buffer-1, p->bufsize+1, "ssd1306_show");
+
+    if (p->bufsize <= sizeof(last_buf)) {
+        memcpy(last_buf, p->buffer, p->bufsize);
+        last_len   = p->bufsize;
+        last_valid = true;
+    } else {
+        last_valid = false;  // buffer larger than shadow: always transfer
+    }
 }

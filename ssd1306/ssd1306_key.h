@@ -41,6 +41,33 @@
 #define KEY_FONT_H  (8 * 2)                 /* Glyph height at scale 2     */
 #define KEY_CHAR_W  (5 * 2 + CHAR_KERNING)  /* Pixel advance per character */
 
+static inline void ssd1306_draw_utf8_key(ssd1306_t *p, uint32_t x, uint32_t y, const char *label) {
+
+    uint32_t len    = ssd1306_utf8_charlen(label);
+    uint32_t text_w = len * KEY_CHAR_W - CHAR_KERNING;
+    uint32_t key_w  = text_w + 2u * KEY_H_PAD;
+    uint32_t kx     = x + (KEY_SIZE > key_w ? (KEY_SIZE - key_w) / 2u : 0u);
+
+    ssd1306_draw_square(p,
+        kx  - KEY_BORDER,
+        y   - KEY_BORDER,
+        key_w  + 1u + 2u * KEY_BORDER,
+        KEY_SIZE + 1u + 2u * KEY_BORDER);
+
+    for (uint32_t cx = kx; cx <= kx + key_w; ++cx) {
+        for (uint32_t cy = y; cy <= y + KEY_SIZE; ++cy) {
+            if (cx < p->width && cy < p->height) {
+                p->buffer[cx + p->width * (cy >> 3)] &= ~(1u << (cy & 7));
+            }
+        }
+    }
+
+    uint32_t text_x = kx + (key_w    > text_w    ? (key_w    - text_w)    / 2u : 0u);
+    uint32_t text_y = y  + (KEY_SIZE > KEY_FONT_H ? (KEY_SIZE - KEY_FONT_H) / 2u : 0u);
+
+    ssd1306_draw_utf8_string(p, text_x, text_y, 2, label);
+}
+
 static inline void ssd1306_draw_key(ssd1306_t *p, uint32_t x, uint32_t y, const char *label) {
 
     /* Label pixel width (byte count × char advance, minus trailing kerning).
@@ -67,7 +94,7 @@ static inline void ssd1306_draw_key(ssd1306_t *p, uint32_t x, uint32_t y, const 
      *    via direct buffer manipulation — identical to the draw_pixel formula in
      *    ssd1306.c: buffer[x + width*(y>>3)] bit (y&7).
      *
-     * Result: solid white border (KEY_BORDER px thick), black face interior. */
+     * Result: solid whiteã  border (KEY_BORDER px thick), black face interior. */
 
     ssd1306_draw_square(p,
         kx  - KEY_BORDER,
@@ -87,7 +114,7 @@ static inline void ssd1306_draw_key(ssd1306_t *p, uint32_t x, uint32_t y, const 
     uint32_t text_x = kx + (key_w    > text_w    ? (key_w    - text_w)    / 2u : 0u);
     uint32_t text_y = y  + (KEY_SIZE > KEY_FONT_H ? (KEY_SIZE - KEY_FONT_H) / 2u : 0u);
 
-    ssd1306_draw_utf8_string(p, text_x, text_y, 2, label);
+    ssd1306_draw_string(p, text_x, text_y, 2, label);
 }
 
 #endif /* _inc_ssd1306_key */

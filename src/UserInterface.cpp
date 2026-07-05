@@ -24,10 +24,46 @@
 #include "hid_app_host.h"
 #include "config.h"
 #include "hardware/clocks.h"
+#include "hardware/i2c.h"
+#include "hardware/vreg.h"
 #include "HidInput.h"
 #include "ssd1306_key.h"
+#include "st_key_layout_label.h"
+#include "hid_key_layout_label.h"
+#include <string.h>
 
-#define DEBOUNCE_COUNT 10
+// ---------------------------------------------------------------------------
+// Key remap group definitions — arrays of Atari ST scancodes included in
+// each remapping group.  Groups intentionally exclude non-remappable keys
+// (Esc, Tab, Ctrl, Shift, Alt, CapsLock, Return, Backspace, Delete, F1-F10).
+// ---------------------------------------------------------------------------
+static const uint8_t kRemapGroup1to9[] = {
+    // Digit row: 1-0 (ST 2-11), minus (12), equals (13), backtick/~ (41)
+    2,3,4,5,6,7,8,9,10,11,12,13,41
+};
+static const uint8_t kRemapGroupAtoZ[] = {
+    // Q-row: Q-] (ST 16-27)
+    16,17,18,19,20,21,22,23,24,25,26,27,
+    // A-row: A-' (ST 30-40), backslash (43)
+    30,31,32,33,34,35,36,37,38,39,40,43,
+    // Z-row: ISO extra (96), Z-/ (ST 44-53), Space (57)
+    96,44,45,46,47,48,49,50,51,52,53,57
+};
+static const uint8_t kRemapGroupSpec[] = {
+    // Help(98), Undo(97), Insert(82), ClrHome(71),
+    // Up(72), Down(80), Left(75), Right(77)
+    98,97,82,71,72,80,75,77
+};
+static const uint8_t kRemapGroupPad[] = {
+    // KP( (99), KP) (100), KP/ (101), KP* (102), KP- (74), KP+ (78), 
+    // KP7-9 (103-105), KP4-6 (106-108), KP1-3 (109-111), KP0 (112), KP. (113)
+    99,100,101,102,74,78,103,104,105,106,107,108,109,110,111,112,113
+};
+
+
+#define DEBOUNCE_COUNT  10   // consecutive low samples required before first fire
+#define REPEAT_DELAY    25   // extra cycles after first fire before auto-repeat starts
+#define REPEAT_RATE      8   // cycles between successive auto-repeat fires
 
 // ---------------------------------------------------------------------------------------------------
 // Deadzone and mouse debug periodic timer — fires every 50 ms to request a joystick or mouse HID poll
@@ -36,15 +72,14 @@
 // on the RP2040 Cortex-M0+ (no hardware reordering on a single core).
 // ----------------------------------------------------------------------------------------------------
 static repeating_timer_t dz_timer;
-static volatile bool dz_poll_needed            = false;
 static volatile bool dz_dirty_requested        = false;
-static volatile bool mouse_dbg_poll_needed     = false;
 static volatile bool mouse_dbg_dirty_requested = false;
 
+// Only requests a redraw of the live debug/deadzone pages. The HID poll is no
+// longer triggered here: the 10 ms main loop already calls handle_mouse() and
+// handle_joystick() every cycle, so an extra 50 ms poll was pure duplication.
 static bool deadzone_timer_cb(repeating_timer_t* rt) {
-    dz_poll_needed            = true;
     dz_dirty_requested        = true;
-    mouse_dbg_poll_needed     = true;
     mouse_dbg_dirty_requested = true;
     return true; // keep repeating
 }
@@ -56,22 +91,22 @@ static int lang_idx = 0;
 // of KeyboardLayout enum and s_layout_map[] in HidInput_common.cpp).
 // ---------------------------------------------------------------------------
 static const char* kLayouts[] = {
-    "CZ-CZ",
-    "DE-CH",
-    "DE-DE",
-    "DK-DK",
-    "EN-UK",
-    "EN-US",
-    "ES-ES",
-    "FI-FI",
-    "FR-CH",
-    "FR-FR",
-    "HU-HU",
-    "IT-IT",
-    "NL-NL",
-    "NO-NO",
-    "PL-PL",
-    "SE-SE",
+    "CZ-CZ", // 0
+    "CH-DE", // 1
+	"CH-FR", // 2
+    "DE-DE", // 3
+    "DK-DK", // 4
+    "EN-UK", // 5
+    "EN-US", // 6
+    "ES-ES", // 7
+    "FI-FI", // 8
+    "FR-FR", // 9
+    "HU-HU", // 10
+    "IT-IT", // 11
+    "NL-NL", // 12
+    "NO-NO", // 13
+    "PL-PL", // 14
+    "SE-SE", // 15
 };
 static const int NUM_LAYOUTS = sizeof(kLayouts) / sizeof(kLayouts[0]);
 
@@ -124,9 +159,20 @@ void UserInterface::init() {
     auto& st = settings.get_settings();
     if (st.keyboard_layout_index >= NUM_LAYOUTS) {
         st.keyboard_layout_index = 0;
+        // Boot-time migration: write immediately (core 1 not launched yet).
         settings.write();
     }
     HidInput::instance().set_layout_from_index(st.keyboard_layout_index);
+
+    // Initialise remap table: if key_remap[] was never populated (all zeros after
+    // flash migration), copy the active layout table now and persist.
+    if (st.key_remap[4] == 0) {
+        const uint8_t* tbl = HidInput::get_layout_table(st.keyboard_layout_index);
+        memcpy(st.key_remap, tbl, 128);
+        // Boot-time migration: write immediately (core 1 not launched yet).
+        settings.write();
+    }
+    HidInput::instance().set_remap_table(st.key_remap);
 
     // Restore joystick dead zone from NV storage; clamp to valid range.
     uint8_t joystick_dead_zone = settings.get_settings().joystick_dead_zone;
@@ -142,6 +188,12 @@ void UserInterface::init() {
     serial_tm  = get_absolute_time();
     splash_tm  = get_absolute_time();
     splash_done = false;
+
+    // Cross-core serial log queue. Must be initialised before core 1 starts
+    // (init() is called from main() before multicore_launch_core1()).
+    // 64 entries is ample: at 7812 baud both directions combined produce at
+    // most ~16 bytes per 10 ms main-loop poll.
+    queue_init(&serial_log_q, sizeof(uint16_t), 64);
 
     // Start the 50 ms periodic timer used to refresh the deadzone and mouse debug page.
     add_repeating_timer_ms(50, deadzone_timer_cb, this, &dz_timer);
@@ -178,7 +230,7 @@ uint8_t UserInterface::get_autofire_rate(int joy) {
 
 void UserInterface::set_mouse_enabled(uint8_t en) {
     settings.get_settings().mouse_enabled = en;
-    settings.write();
+    schedule_settings_write();
     dirty = true;
 }
 
@@ -189,7 +241,7 @@ void UserInterface::set_mouse_enabled(uint8_t en) {
 void UserInterface::update_serial() {
     uint8_t y = 0;
     ssd1306_clear(&disp);
-    for (auto it : serial_lines) {
+    for (const auto& it : serial_lines) {
         ssd1306_draw_string(&disp, 0, y, 1, (char*)it.c_str());
         y += 9;
     }
@@ -223,7 +275,24 @@ void UserInterface::update_status() {
 }
 
 void UserInterface::set_cpu_speed(uint32_t khz) {
+    // Raise core voltage before overclocking: the default 1.10 V is marginal
+    // above ~250 MHz. Restore it when dropping back to the safe clock.
+    if (khz > DEFAULT_CPU_CLOCK_KHZ) {
+        vreg_set_voltage(VREG_VOLTAGE_1_20);
+        sleep_ms(2);  // let the regulator settle before raising the clock
+    }
+
     set_sys_clock_khz(khz, false);
+
+    // clk_sys clocks the I2C block, so SCL scales with the CPU frequency.
+    // Re-program the SSD1306 baud rate to keep it at 400 kHz (was drifting to
+    // ~480 kHz at 150 MHz and ~864 kHz at 270 MHz, out of the panel's spec).
+    i2c_set_baudrate(SSD1306_I2C, 400000);
+
+    if (khz <= DEFAULT_CPU_CLOCK_KHZ) {
+        vreg_set_voltage(VREG_VOLTAGE_1_10);
+    }
+
     dirty = true;
 }
 
@@ -298,7 +367,8 @@ void UserInterface::update_menu2() {
         get_translation(KEY_BACK, lang_idx),
         get_translation(KEY_LANGUAGE, lang_idx),
         get_translation(KEY_LAYOUT, lang_idx),
-        get_translation(KEY_DEAD_ZONE, lang_idx)
+        get_translation(KEY_DEAD_ZONE, lang_idx),
+        get_translation(KEY_REMAP, lang_idx)
     };
     ssd1306_clear(&disp);
     for (int i = 0; i < MENU2_COUNT; ++i) {
@@ -393,7 +463,6 @@ void UserInterface::update_help_1() {
 
 void UserInterface::update_help_2() {
     ssd1306_clear(&disp);
-    // FIX (bug 7): Ctrl+F9 toggles Joy0 (not Joy1). Label corrected.
     ssd1306_draw_string     (&disp, 0,  0, 1, (char*)"Ctrl + F9:");
     ssd1306_draw_string     (&disp, 0, 10, 1, (char*)"Joy0 D-sub<->USB");
     ssd1306_draw_string     (&disp, 0, 20, 1, (char*)"Alt + NumPad '+':");
@@ -514,6 +583,112 @@ void UserInterface::update_autofire() {
 }
 
 // ---------------------------------------------------------------------------
+// update_remap_group
+// PAGE_REMAP_GROUP: menu with 6 entries.
+//   0=Back  1=1-9  2=A-Z  3=Spec.  4=Pad  5=Clear all
+// ---------------------------------------------------------------------------
+void UserInterface::update_remap_group() {
+    ssd1306_clear(&disp);
+
+    if (remap_clear_confirm) {
+        ssd1306_draw_utf8_string_inverse(&disp,  0,  4, 1, get_translation(KEY_CLEAR_CONFIRM, lang_idx));
+        ssd1306_draw_utf8_string        (&disp,  0, 24, 1, get_translation(KEY_OK_CONFIRM, lang_idx));
+        ssd1306_draw_utf8_string        (&disp,  0, 36, 1, get_translation(KEY_LR_CANCEL, lang_idx));
+        return;
+    }
+
+    const char* entries[REMAP_GROUP_COUNT] = {
+        get_translation(KEY_BACK, lang_idx),
+        " 1-9",
+        " A-Z",
+        " Special",
+        " Key Pad",
+        get_translation(KEY_REMAP_CLEAR, lang_idx)
+    };
+    for (int i = 0; i < REMAP_GROUP_COUNT; ++i) {
+        char cur[2] = { (remap_group_selected == i) ? UI_CURSOR_GLYPH : ' ', 0 };
+        ssd1306_draw_string    (&disp,  0, i * REMAP_GROUP_LINE_H, 1, cur);
+        ssd1306_draw_utf8_string(&disp, 10, i * REMAP_GROUP_LINE_H, 1, (char*)entries[i]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// update_remap_list
+// PAGE_REMAP_LIST: shows the ST scancode for the selected group entry (left)
+// and the USB key currently mapped to it (right), as key-cap widgets.
+// The user presses a USB key to set a new mapping, then MIDDLE to confirm.
+// ---------------------------------------------------------------------------
+void UserInterface::update_remap_list() {
+    if (!remap_group_ptr || remap_group_size == 0) return;
+
+    ssd1306_clear(&disp);
+
+    if (remap_exit_confirm) {
+        ssd1306_draw_utf8_string_inverse(&disp,  0,  4, 1, get_translation(KEY_QUIT_REMAPPING, lang_idx));
+        ssd1306_draw_utf8_string        (&disp,  0, 24, 1, get_translation(KEY_OK_CONFIRM, lang_idx));
+        ssd1306_draw_utf8_string        (&disp,  0, 36, 1, get_translation(KEY_LR_CANCEL, lang_idx));
+        return;
+    }
+
+    // Title bar: group name and counter
+    char title[22];
+    const char* grp_names[] = { "", "1-9", "A-Z", "Special", "Key Pad", "" };
+    int grp_idx = (remap_group_selected >= 1 && remap_group_selected <= 4) ? remap_group_selected : 0;
+    ssd1306_draw_string(&disp, 0, 0, 1, grp_names[grp_idx]);
+
+    // Vertical separator
+    ssd1306_draw_square(&disp, 63, 9, 1, 55);
+
+    // Centre each label in its half: advance per char at scale 1 = 5 (font_8x5 width) + CHAR_KERNING;
+    // visual width = len*(5+CHAR_KERNING)-CHAR_KERNING; left half = 63 px, right half = 64 px at x=64.
+    int st_w  = (int)strlen("ST")  * (5 + CHAR_KERNING) - CHAR_KERNING;
+    int usb_w = (int)strlen("USB") * (5 + CHAR_KERNING) - CHAR_KERNING;
+    ssd1306_draw_string(&disp, (63 - st_w)  / 2,      10, 1, (char*)"ST");
+    ssd1306_draw_string(&disp, 64 + (64 - usb_w) / 2, 10, 1, (char*)"USB");
+
+    int layout_idx = settings.get_settings().keyboard_layout_index;
+    uint8_t st_sc = remap_group_ptr[remap_list_index];
+
+    // ISO-only key on an ANSI layout: show "N/A" and skip the remap widgets.
+    if (sc_is_iso_key(st_sc) && !layout_has_iso_key(layout_idx)) {
+        ssd1306_draw_string(&disp, 20, 28, 1, (char*)"N/A (ANSI kbd)");
+        char hint[16];
+        sprintf(hint, "%d/%d", remap_list_index + 1, remap_group_size);
+        ssd1306_draw_string(&disp, 0, 55, 1, hint);
+        return;
+    }
+
+    const char* st_label = get_layout_st_label(st_sc, layout_idx);
+    if (!st_label) st_label = st_scancode_name(st_sc);
+
+    // Find the USB (HID) key currently mapped to this ST scancode
+    const uint8_t* remap = settings.get_settings().key_remap;
+    uint8_t cur_hid = 0;
+    for (int h = 1; h < 128; ++h) {
+        if (remap[h] == st_sc) { cur_hid = h; break; }
+    }
+
+    // Show pending key if set (latched after release), otherwise current saved mapping.
+    // Uses the USB-native HID label table, independent of the ST scancode system.
+    // "N/A" when no HID key produces this ST scancode (orphaned after a reassignment).
+    const char* usb_label;
+    if (pending_remap_hid != 0) {
+        usb_label = get_hid_layout_label(pending_remap_hid, layout_idx);
+    } else {
+        usb_label = (cur_hid != 0) ? get_hid_layout_label(cur_hid, layout_idx) : "N/A";
+    }
+
+    // Draw key-cap widgets: ST on left (x=16,y=22), USB on right (x=80,y=22)
+    ssd1306_draw_utf8_key(&disp, 16, 22, st_label);
+    ssd1306_draw_utf8_key(&disp, 80, 22, usb_label);
+
+    // Bottom counter hint
+    char hint[16];
+    sprintf(hint, "%d/%d", remap_list_index + 1, remap_group_size);
+    ssd1306_draw_string(&disp, 0, 55, 1, hint);
+}
+
+// ---------------------------------------------------------------------------
 // update_mouse_debug
 // Screen layout (128 x 64):
 //
@@ -585,13 +760,33 @@ void UserInterface::set_mouse_debug_delta(int dx, int dy) {
     if (dy != 0) mouse_debug_dy = dy;
 }
 
+// Apply pending_remap_hid to key_remap[] and schedule a deferred flash write.
+// Safe to call when pending_remap_hid == 0 (no-op). Must be called while
+// remap_list_index still points to the entry being confirmed.
+void UserInterface::commit_pending_remap() {
+    if (pending_remap_hid == 0) return;
+    uint8_t  st_sc = remap_group_ptr[remap_list_index];
+    uint8_t* remap = settings.get_settings().key_remap;
+    if (remap[pending_remap_hid] != st_sc) {
+        remap[pending_remap_hid] = st_sc;
+        schedule_settings_write();
+        HidInput::instance().set_remap_table(remap);
+    }
+    pending_remap_hid = 0;
+}
+
 void UserInterface::handle_buttons() {
     for (int i = 0; i < 3; ++i) {
         bool state = gpio_get(btn_gpio[i]);
         if (!state) {
-            // Latch at DEBOUNCE_COUNT until the button is released.
-            if (btn_count[i] <= DEBOUNCE_COUNT) {
-                if (++btn_count[i] == DEBOUNCE_COUNT) {
+            ++btn_count[i];
+            if (btn_count[i] == DEBOUNCE_COUNT) {
+                // Initial fire on debounce threshold.
+                on_button_down(i);
+            } else if (btn_count[i] > DEBOUNCE_COUNT + REPEAT_DELAY) {
+                // Auto-repeat: fire every REPEAT_RATE cycles while held.
+                int phase = (btn_count[i] - DEBOUNCE_COUNT - REPEAT_DELAY) % REPEAT_RATE;
+                if (phase == 0) {
                     on_button_down(i);
                 }
             }
@@ -604,7 +799,7 @@ void UserInterface::handle_buttons() {
 void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
     if (joystick_num > 1) return;
     settings.get_settings().joy_device ^= (1 << joystick_num);
-    settings.write();
+    schedule_settings_write();
     dirty = true;
 }
 
@@ -630,6 +825,14 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //           ──(mid, Kbd Layout)──► LAYOUT
 //           ──(mid, Deadzone)──► DEADZONE
 //   LANGUAGE, LAYOUT, DEADZONE ──(mid)──► MENU_2
+//   MENU_2  ──(mid, Remapping)──► REMAP_GROUP
+//   REMAP_GROUP ──(mid, Back)──► MENU_2
+//           ──(mid, group)──► REMAP_LIST (capture mode ON)
+//           ──(mid, Clear)── reload layout, stay
+//   REMAP_LIST ──(mid, pending)── save mapping, stay
+//              ──(mid, no pending)── show quit-confirm overlay
+//              ──(mid, overlay shown)── capture mode OFF, ──► REMAP_GROUP
+//              ──(left/right, overlay shown)── dismiss overlay, stay
 //   AUTOFIRE ──(mid)──► MENU_1
 //   HELP_1  ──(mid)──► HELP_2
 //   HELP_2  ──(mid)──► MENU_1
@@ -683,10 +886,14 @@ void UserInterface::on_button_down(int i) {
 
             case PAGE_MENU_2:
                 switch (menu2_selected) {
-                    case 0: page = PAGE_MENU_1;  break;  // Back
-                    case 1: page = PAGE_LANGUAGE; break; // Language
-                    case 2: page = PAGE_LAYOUT;   break; // Keyboard layout
-                    case 3: page = PAGE_DEADZONE; break; // Joystick deadzone
+                    case 0: page = PAGE_MENU_1;   break;  // Back
+                    case 1: page = PAGE_LANGUAGE; break;  // Language
+                    case 2: page = PAGE_LAYOUT;   break;  // Keyboard layout
+                    case 3: page = PAGE_DEADZONE; break;  // Joystick deadzone
+                    case 4:                                // Key remapping
+                        remap_group_selected = 0;
+                        page = PAGE_REMAP_GROUP;
+                        break;
                 }
                 dirty = true;
                 break;
@@ -705,6 +912,80 @@ void UserInterface::on_button_down(int i) {
                 page  = PAGE_MENU_2;
                 dirty = true;
                 break;
+
+            case PAGE_REMAP_GROUP:
+                if (remap_clear_confirm) {
+                    // Second MIDDLE on confirm overlay: perform the reset.
+                    remap_clear_confirm = false;
+                    auto& st = settings.get_settings();
+                    memcpy(st.key_remap,
+                           HidInput::get_layout_table(st.keyboard_layout_index), 128);
+                    schedule_settings_write();
+                    HidInput::instance().set_remap_table(st.key_remap);
+                    dirty = true;
+                    break;
+                }
+                switch (remap_group_selected) {
+                    case 0:  // Back
+                        page = PAGE_MENU_2;
+                        break;
+                    case 1:  // 1-9
+                        remap_group_ptr  = kRemapGroup1to9;
+                        remap_group_size = (int)(sizeof(kRemapGroup1to9));
+                        remap_list_index = 0;
+                        pending_remap_hid = 0;
+                        HidInput::instance().set_capture_mode(true);
+                        page = PAGE_REMAP_LIST;
+                        break;
+                    case 2:  // A-Z
+                        remap_group_ptr  = kRemapGroupAtoZ;
+                        remap_group_size = (int)(sizeof(kRemapGroupAtoZ));
+                        remap_list_index = 0;
+                        pending_remap_hid = 0;
+                        HidInput::instance().set_capture_mode(true);
+                        page = PAGE_REMAP_LIST;
+                        break;
+                    case 3:  // Spec.
+                        remap_group_ptr  = kRemapGroupSpec;
+                        remap_group_size = (int)(sizeof(kRemapGroupSpec));
+                        remap_list_index = 0;
+                        pending_remap_hid = 0;
+                        HidInput::instance().set_capture_mode(true);
+                        page = PAGE_REMAP_LIST;
+                        break;
+                    case 4:  // Pad
+                        remap_group_ptr  = kRemapGroupPad;
+                        remap_group_size = (int)(sizeof(kRemapGroupPad));
+                        remap_list_index = 0;
+                        pending_remap_hid = 0;
+                        HidInput::instance().set_capture_mode(true);
+                        page = PAGE_REMAP_LIST;
+                        break;
+                    case 5:  // Clear all — ask for confirmation first
+                        remap_clear_confirm = true;
+                        break;
+                    default: break;
+                }
+                dirty = true;
+                break;
+
+            case PAGE_REMAP_LIST: {
+                if (remap_exit_confirm) {
+                    // Second MIDDLE on confirm overlay: exit to group.
+                    remap_exit_confirm = false;
+                    pending_remap_hid  = 0;
+                    HidInput::instance().set_capture_mode(false);
+                    page = PAGE_REMAP_GROUP;
+                } else if (pending_remap_hid != 0) {
+                    commit_pending_remap();
+                    // Stay on PAGE_REMAP_LIST — capture mode remains active.
+                } else {
+                    // Nothing pending: show quit-confirm overlay.
+                    remap_exit_confirm = true;
+                }
+                dirty = true;
+                break;
+            }
 
             case PAGE_AUTOFIRE:
                 // MIDDLE advances the cursor through items; on the last item exits.
@@ -752,7 +1033,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_MOUSE:
                 if (settings.get_settings().mouse_speed > MOUSE_MIN) {
                     --settings.get_settings().mouse_speed;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 }
                 break;
@@ -760,7 +1041,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_JOY:
                 // Toggle D-Sub <-> USB for the currently selected joystick.
                 settings.get_settings().joy_device ^= (1 << joy_selected);
-                settings.write();
+                schedule_settings_write();
                 dirty = true;
                 break;
 
@@ -774,25 +1055,25 @@ void UserInterface::on_button_down(int i) {
                 if (autofire_selected == 0) {
                     // Joy1 mode: toggle OFF <-> STANDBY
                     st.autofire_mode_joy1 = st.autofire_mode_joy1 ? 0 : 1;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 } else if (autofire_selected == 1) {
                     // Joy1 rate: LEFT = decrease
                     if (st.autofire_rate_joy1 > AUTOFIRE_MIN) {
                         --st.autofire_rate_joy1;
-                        settings.write();
+                        schedule_settings_write();
                         dirty = true;
                     }
                 } else if (autofire_selected == 2) {
                     // Joy0 mode: toggle OFF <-> STANDBY
                     st.autofire_mode_joy0 = st.autofire_mode_joy0 ? 0 : 1;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 } else {
                     // Joy0 rate: LEFT = decrease
                     if (st.autofire_rate_joy0 > AUTOFIRE_MIN) {
                         --st.autofire_rate_joy0;
-                        settings.write();
+                        schedule_settings_write();
                         dirty = true;
                     }
                 }
@@ -805,10 +1086,43 @@ void UserInterface::on_button_down(int i) {
                 dirty = true;
                 break;
 
+            case PAGE_REMAP_GROUP:
+                if (remap_clear_confirm) {
+                    remap_clear_confirm = false; // cancel, stay on page
+                    dirty = true;
+                    break;
+                }
+                remap_group_selected =
+                    (remap_group_selected - 1 + REMAP_GROUP_COUNT) % REMAP_GROUP_COUNT;
+                dirty = true;
+                break;
+
+            case PAGE_REMAP_LIST:
+                if (remap_exit_confirm) {
+                    remap_exit_confirm = false; // cancel exit confirm, stay on page
+                    dirty = true;
+                    break;
+                }
+                commit_pending_remap();
+                if (remap_group_size > 0) {
+                    int layout_idx = settings.get_settings().keyboard_layout_index;
+                    int steps = remap_group_size; // safety: at most one full wrap
+                    do {
+                        remap_list_index =
+                            (remap_list_index - 1 + remap_group_size) % remap_group_size;
+                        --steps;
+                    } while (steps > 0 &&
+                             sc_is_iso_key(remap_group_ptr[remap_list_index]) &&
+                             !layout_has_iso_key(layout_idx));
+                }
+                pending_remap_hid = 0;
+                dirty = true;
+                break;
+
             case PAGE_LANGUAGE:
                 lang_idx = (lang_idx - 1 + NUM_LANGUAGES) % NUM_LANGUAGES;
                 settings.get_settings().language_index = lang_idx;
-                settings.write();
+                schedule_settings_write();
                 dirty = true;
                 break;
 
@@ -818,8 +1132,10 @@ void UserInterface::on_button_down(int i) {
                 int idx = (int)st.keyboard_layout_index - 1;
                 if (idx < 0) idx = NUM_LAYOUTS - 1;
                 st.keyboard_layout_index = (uint8_t)idx;
-                settings.write();
+                memcpy(st.key_remap, HidInput::get_layout_table(st.keyboard_layout_index), 128);
+                schedule_settings_write();
                 HidInput::instance().set_layout_from_index(st.keyboard_layout_index);
+                HidInput::instance().set_remap_table(st.key_remap);
                 dirty = true;
                 break;
             }
@@ -827,7 +1143,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_DEADZONE:
                 if (settings.get_settings().joystick_dead_zone > JOY_DZ_MIN) {
                     --settings.get_settings().joystick_dead_zone;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 }
                 break;
@@ -842,7 +1158,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_MOUSE:
                 if (settings.get_settings().mouse_speed < MOUSE_MAX) {
                     ++settings.get_settings().mouse_speed;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 }
                 break;
@@ -850,7 +1166,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_JOY:
                 // Toggle D-Sub <-> USB for the currently selected joystick.
                 settings.get_settings().joy_device ^= (1 << joy_selected);
-                settings.write();
+                schedule_settings_write();
                 dirty = true;
                 break;
 
@@ -864,25 +1180,25 @@ void UserInterface::on_button_down(int i) {
                 if (autofire_selected == 0) {
                     // Joy1 mode: toggle OFF <-> STANDBY
                     st.autofire_mode_joy1 = st.autofire_mode_joy1 ? 0 : 1;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 } else if (autofire_selected == 1) {
                     // Joy1 rate: RIGHT = increase
                     if (st.autofire_rate_joy1 < AUTOFIRE_MAX) {
                         ++st.autofire_rate_joy1;
-                        settings.write();
+                        schedule_settings_write();
                         dirty = true;
                     }
                 } else if (autofire_selected == 2) {
                     // Joy0 mode: toggle OFF <-> STANDBY
                     st.autofire_mode_joy0 = st.autofire_mode_joy0 ? 0 : 1;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 } else {
                     // Joy0 rate: RIGHT = increase
                     if (st.autofire_rate_joy0 < AUTOFIRE_MAX) {
                         ++st.autofire_rate_joy0;
-                        settings.write();
+                        schedule_settings_write();
                         dirty = true;
                     }
                 }
@@ -895,21 +1211,54 @@ void UserInterface::on_button_down(int i) {
                 dirty = true;
                 break;
 
+            case PAGE_REMAP_GROUP:
+                if (remap_clear_confirm) {
+                    remap_clear_confirm = false; // cancel, stay on page
+                    dirty = true;
+                    break;
+                }
+                remap_group_selected =
+                    (remap_group_selected + 1) % REMAP_GROUP_COUNT;
+                dirty = true;
+                break;
+
+            case PAGE_REMAP_LIST:
+                if (remap_exit_confirm) {
+                    remap_exit_confirm = false; // cancel exit confirm, stay on page
+                    dirty = true;
+                    break;
+                }
+                commit_pending_remap();
+                if (remap_group_size > 0) {
+                    int layout_idx = settings.get_settings().keyboard_layout_index;
+                    int steps = remap_group_size; // safety: at most one full wrap
+                    do {
+                        remap_list_index =
+                            (remap_list_index + 1) % remap_group_size;
+                        --steps;
+                    } while (steps > 0 &&
+                             sc_is_iso_key(remap_group_ptr[remap_list_index]) &&
+                             !layout_has_iso_key(layout_idx));
+                }
+                pending_remap_hid = 0;
+                dirty = true;
+                break;
+
             case PAGE_LANGUAGE:
                 lang_idx = (lang_idx + 1) % NUM_LANGUAGES;
                 settings.get_settings().language_index = lang_idx;
-                settings.write();
+                schedule_settings_write();
                 dirty = true;
                 break;
 
             case PAGE_LAYOUT: {
                 auto& st = settings.get_settings();
-                // FIX (bug 5): cast to int to ensure modulo is applied on a
-                // well-defined value even if the stored index is corrupted.
                 int idx = ((int)st.keyboard_layout_index + 1) % NUM_LAYOUTS;
                 st.keyboard_layout_index = (uint8_t)idx;
-                settings.write();
+                memcpy(st.key_remap, HidInput::get_layout_table(st.keyboard_layout_index), 128);
+                schedule_settings_write();
                 HidInput::instance().set_layout_from_index(st.keyboard_layout_index);
+                HidInput::instance().set_remap_table(st.key_remap);
                 dirty = true;
                 break;
             }
@@ -917,7 +1266,7 @@ void UserInterface::on_button_down(int i) {
             case PAGE_DEADZONE:
                 if (settings.get_settings().joystick_dead_zone < JOY_DZ_MAX) {
                     ++settings.get_settings().joystick_dead_zone;
-                    settings.write();
+                    schedule_settings_write();
                     dirty = true;
                 }
                 break;
@@ -934,20 +1283,35 @@ void UserInterface::on_button_down(int i) {
 // Only redraws when dirty == true, except for time-gated pages (SERIAL,
 // USB_DEBUG, SPLASH) which manage their own refresh cadence.
 // ---------------------------------------------------------------------------
-void UserInterface::update() {
-       handle_buttons();
+// ---------------------------------------------------------------------------
+// Deferred NV settings write.
+// Each slider step / toggle only marks the settings dirty; the flash write
+// (sector erase + program, ~50 ms with interrupts off and core 1 parked)
+// happens once, after no change occurred for SETTINGS_WRITE_DELAY_MS.
+// ---------------------------------------------------------------------------
+#define SETTINGS_WRITE_DELAY_MS 1500
 
-    // Handle mouse BEFORE joystick so that usb_mouse_buttons is up-to-date
-    // when handle_joystick() seeds mouse_state from it.
-    // Both flags are set by the same 50 ms timer callback, so both run every cycle.
-    if (mouse_dbg_poll_needed) {
-        mouse_dbg_poll_needed = false;
-        HidInput::instance().handle_mouse(0);
+void UserInterface::schedule_settings_write() {
+    settings_dirty    = true;
+    settings_dirty_tm = get_absolute_time();
+}
+
+void UserInterface::update() {
+    handle_buttons();
+
+    // Format pending serial log events on core 0, outside the emulation path.
+    drain_serial_log();
+
+    // Flush deferred settings once the last change has settled.
+    if (settings_dirty &&
+        absolute_time_diff_us(settings_dirty_tm, get_absolute_time()) >=
+            (int64_t)SETTINGS_WRITE_DELAY_MS * 1000) {
+        settings_dirty = false;
+        settings.write();
     }
-    if (dz_poll_needed) {
-        dz_poll_needed = false;
-        HidInput::instance().handle_joystick();
-    }
+
+    // Mouse and joystick are polled by the 10 ms main loop, not here: the
+    // periodic timer only requests redraws (below) for the live debug pages.
 
     if (dz_dirty_requested) {
         dz_dirty_requested = false;
@@ -957,9 +1321,22 @@ void UserInterface::update() {
         mouse_dbg_dirty_requested = false;
         if (page == PAGE_MOUSE_DEBUG) dirty = true;
     }
-	
-	
-	
+
+    // On PAGE_REMAP_LIST, trigger a redraw when the captured USB key changes.
+    // This avoids forcing dirty every loop cycle while still reacting immediately
+    // to a key press. remap_list_index changes are already handled by on_button_down().
+    if (page == PAGE_REMAP_LIST) {
+        uint8_t cap = HidInput::instance().get_captured_hid_keycode();
+        if (cap != last_captured_hid) {
+            last_captured_hid = cap;
+            // Latch after release; reject system-reserved keys.
+            if (cap != 0 && !hid_is_system_reserved(cap)) pending_remap_hid = cap;
+            dirty = true;
+        }
+    } else {
+        last_captured_hid = 0xFF; // reset sentinel when leaving the page
+    }
+
 	if (!dirty) return;
 	dirty = false;
 
@@ -1004,6 +1381,14 @@ void UserInterface::update() {
             update_autofire();
             break;
 
+        case PAGE_REMAP_GROUP:
+            update_remap_group();
+            break;
+
+        case PAGE_REMAP_LIST:
+            update_remap_list();
+            break;
+
         case PAGE_HELP_1:
             update_help_1();
             break;
@@ -1035,8 +1420,6 @@ void UserInterface::update() {
             if (absolute_time_diff_us(splash_tm, tm) >= (3 * 1000 * 1000)) {
                 splash_done = true;
                 page  = PAGE_MOUSE;
-                // FIX (bug 4): render the new page immediately so ssd1306_show()
-                // is called at the end of this same update() call.
                 update_status();
                 update_mouse();
             } else {
@@ -1069,13 +1452,29 @@ void UserInterface::update() {
 }
 
 void UserInterface::serial(bool send, uint8_t data) {
-    char buf[32];
-    sprintf(buf, "%s%02X", send ? "              " : "", data);
-    serial_lines.push_back(std::string(buf));
-    while (serial_lines.size() > 7) {
-        serial_lines.pop_front();
+    // Called from core 1 (HD6301 TX via tdr_putb -> serial_send) and from
+    // core 0 (UART RX). No formatting, no heap allocation, no member writes
+    // here: just push the raw event. Dropped silently when the queue is full
+    // (this is a debug log; losing entries is preferable to blocking the
+    // emulation hot path).
+    uint16_t event = (uint16_t)data | (send ? 0x100u : 0u);
+    queue_try_add(&serial_log_q, &event);
+}
+
+void UserInterface::drain_serial_log() {
+    uint16_t event;
+    bool got_event = false;
+    while (queue_try_remove(&serial_log_q, &event)) {
+        char buf[32];
+        sprintf(buf, "%s%02X", (event & 0x100) ? "              " : "",
+                (unsigned)(event & 0xFF));
+        serial_lines.push_back(std::string(buf));
+        while (serial_lines.size() > 7) {
+            serial_lines.pop_front();
+        }
+        got_event = true;
     }
-    if (page == PAGE_SERIAL) {
+    if (got_event && page == PAGE_SERIAL) {
         dirty = true;
     }
 }

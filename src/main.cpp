@@ -22,6 +22,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/util/queue.h"
 #include "hardware/clocks.h"
 #include "hardware/watchdog.h"
 #include "config.h"
@@ -49,21 +50,36 @@ extern unsigned char rom_HD6301V1ST_img[];
 extern unsigned int  rom_HD6301V1ST_img_len;
 
 // ---------------------------------------------------------------------------
-// Serial RX: read all available bytes from the ST and feed them to the HD6301.
-// Called every main loop iteration — must stay fast.
-// At 7812 baud, one byte arrives every ~1.28 ms.
+// Serial RX: bytes from the ST cross from core 0 to core 1 through a
+// lock-free SPSC queue (pico/util/queue).
+//
+// hd6301_receive_byte() performs read-modify-write on iram[TRCSR], which the
+// emulation on core 1 also modifies (rdr_getb, trcsr_putb, hd6301_tx_empty).
+// Feeding bytes directly from core 0 raced those RMW sequences and could lose
+// RDRF/ORFE flags. Instead core 0 only drains the UART FIFO into the queue;
+// core 1 pops bytes and updates the SCI registers itself.
+// At 7812 baud, one byte arrives every ~1.28 ms; core 1 polls every 250 us.
 // ---------------------------------------------------------------------------
+#define ST_RX_QUEUE_DEPTH 32
+
+static queue_t st_rx_queue;
+
+// Core 0: move UART bytes into the cross-core queue. Must stay fast.
 static void handle_rx_from_st()
 {
     unsigned char data;
-    while (SerialPort::instance().recv(data)) {
-        if (!hd6301_sci_busy()) {
-            hd6301_receive_byte(data);
-        } else {
-            // HD6301 RDR is full; the UART FIFO will hold this byte
-            // until the next iteration.
-            break;
-        }
+    while (!queue_is_full(&st_rx_queue) && SerialPort::instance().recv(data)) {
+        queue_try_add(&st_rx_queue, &data);
+    }
+}
+
+// Core 1: feed queued bytes to the HD6301 SCI. While RDR is still full the
+// byte stays in the queue, mirroring the previous UART-FIFO holding behaviour.
+static void feed_hd6301_from_queue()
+{
+    unsigned char data;
+    while (!hd6301_sci_busy() && queue_try_remove(&st_rx_queue, &data)) {
+        hd6301_receive_byte(data);
     }
 }
 
@@ -90,11 +106,17 @@ static void setup_hd6301()
 // ---------------------------------------------------------------------------
 void core1_entry()
 {
+    // Allow core 0 to park this core during flash writes (NVSettings::write):
+    // executing from XIP while the flash is being erased/programmed would
+    // hard-fault. The lockout handler runs from RAM.
+    multicore_lockout_victim_init();
+
     setup_hd6301();
     hd6301_reset(1);
 
     absolute_time_t tm = get_absolute_time();
     while (true) {
+        feed_hd6301_from_queue();
         hd6301_tx_empty(SerialPort::instance().send_buf_empty() ? 1 : 0);
         hd6301_run_clocks(CYCLES_PER_LOOP);
         tm = delayed_by_us(tm, CYCLES_PER_LOOP);
@@ -104,6 +126,12 @@ void core1_entry()
 
 int main()
 {
+    // Set the system clock first. clk_sys feeds the I2C and UART peripherals,
+    // so fixing it before ui.init() / SerialPort::open() lets their baud rates
+    // be computed for the final 150 MHz. Previously i2c_init() ran at the
+    // 125 MHz boot clock, leaving SSD1306 SCL ~20% over spec after this call.
+    set_sys_clock_khz(150000, true);
+
     // TinyUSB must be initialised before any other peripheral setup.
     // tusb_init() with no args is deprecated since TinyUSB 0.18.
     // Use tuh_init() directly for host-only mode on native USB port (rhport 0).
@@ -115,10 +143,6 @@ int main()
     ui.init();
     ui.update();
 
-    // Run at 150 MHz — stable for USB host and HD6301 emulation timing.
-    // No overclock: simpler peripheral management, no re-init needed.
-    set_sys_clock_khz(150000, true);
-
     SerialPort::instance().open();
     SerialPort::instance().set_ui(ui);
 
@@ -127,6 +151,8 @@ int main()
 
     // Small delay to let USB devices enumerate before core 1 starts.
     sleep_ms(100);
+
+    queue_init(&st_rx_queue, sizeof(unsigned char), ST_RX_QUEUE_DEPTH);
 
     multicore_launch_core1(core1_entry);
 

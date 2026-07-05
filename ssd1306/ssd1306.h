@@ -67,6 +67,8 @@ typedef struct {
  bool external_vcc;  // Whether display uses external vcc
  uint8_t *buffer;    // Display buffer
  size_t bufsize;     // Buffer size
+ int dma_chan;       // DMA channel feeding the I2C FIFO (-1 = blocking fallback)
+ uint16_t *dma_buf;  // IC_DATA_CMD staging buffer for the in-flight frame
 } ssd1306_t;
 /**
 *    @brief initialize display
@@ -111,6 +113,12 @@ void ssd1306_invert(ssd1306_t *p, uint8_t inv);
     @param[in] p : instance of display
 */
 void ssd1306_show(ssd1306_t *p);
+/**
+    @brief wait until any in-flight (DMA) frame transfer has fully drained.
+    Call before re-programming the I2C baudrate or changing clk_sys.
+    @param[in] p : instance of display
+*/
+void ssd1306_flush(ssd1306_t *p);
 /**
     @brief clear display buffer
     @param[in] p : instance of display
@@ -189,6 +197,7 @@ void ssd1306_draw_string_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_
 */
 void ssd1306_draw_string(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s);
 // --- UTF-8 aware text rendering ---
+uint32_t ssd1306_utf8_charlen(const char *s);
 void ssd1306_draw_utf8_string_with_font(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const uint8_t *font, const char *s);
 void ssd1306_draw_utf8_string(ssd1306_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s);
 /**

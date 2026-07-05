@@ -21,74 +21,22 @@
 #include "st_key_lookup.h"
 
 extern "C" {
-// Base per-locale tables you already compile:
-extern const uint8_t st_key_lookup_hid_en_us[ST_KEY_LOOKUP_SIZE];
-extern const uint8_t st_key_lookup_hid_en_uk[ST_KEY_LOOKUP_SIZE];
-extern const uint8_t st_key_lookup_hid_fr_fr[ST_KEY_LOOKUP_SIZE];
+    extern const uint8_t st_key_lookup_hid[ST_KEY_LOOKUP_SIZE];
 }
 
-// ---------- Global overlay (applied to ALL layouts) ----------
-static uint8_t overlay_global[ST_KEY_LOOKUP_SIZE] = {0};
-
-// ---------- Per-layout overlays (optional) ----------
 static uint8_t overlay_none[ST_KEY_LOOKUP_SIZE] = {0};
-static uint8_t overlay_en_us[ST_KEY_LOOKUP_SIZE] = {0};
-static uint8_t overlay_en_uk[ST_KEY_LOOKUP_SIZE] = {0};
-static uint8_t overlay_fr_fr[ST_KEY_LOOKUP_SIZE] = {0};
 
-// Registry: base table + per-layout overlay
 static const LookupEntry g_registry[] = {
-  { KeyboardLayout::EN_US, st_key_lookup_hid_en_uk, overlay_en_us },
-  { KeyboardLayout::EN_UK, st_key_lookup_hid_en_us, overlay_en_uk },
-  { KeyboardLayout::FR_FR, st_key_lookup_hid_fr_fr, overlay_fr_fr },
-  // add more layouts here...
+  { KeyboardLayout::EN_US, st_key_lookup_hid, overlay_none },
 };
 
-static const LookupEntry* g_default = &g_registry[0]; // default to EN_UK (or EN_US if you prefer)
+static const LookupEntry* g_default = &g_registry[0];
 
-const LookupEntry* find_lookup(KeyboardLayout layout) {
-  for (auto& it : g_registry)
-    if (it.layout == layout) return &it;
+const LookupEntry* find_lookup(KeyboardLayout) {
   return g_default;
 }
 
-void registry_set_overlay(KeyboardLayout layout, const uint8_t* overlay128) {
-  // Optional runtime hook if you want to change per-layout overlay on the fly.
-  // For simplicity we do not copy; we assume overlay128 points to a stable 128-byte buffer.
-  for (auto& it : g_registry) {
-    if (it.layout == layout) {
-      // const_cast: we know it's a static table, adjust pointer here
-      const_cast<uint8_t*&>(it.overlay) = const_cast<uint8_t*>(overlay128);
-      return;
-    }
-  }
+void registry_set_overlay(KeyboardLayout, const uint8_t*) {
+  // No-op: single table, no per-layout overlays.
 }
-
-// Initialize overlays once
-static struct OverlayInit {
-  OverlayInit() {
-    // ---------- Global overlay (for ALL layouts) ----------
-    // Map HID PrintScreen (0x46) -> ST Help (98)
-    overlay_global[0x46] = 98;
-    // Map HID ScrollLock (0x47) -> ST Undo (97)
-    overlay_global[0x47] = 97;
-
-    // ---------- Per-layout examples ----------
-    // EN_UK: PageUp -> keypad '(' (99), PageDown -> keypad ')' (100)
-    overlay_en_uk[0x4B] = 99;
-    overlay_en_uk[0x4E] = 100;
-
-    // EN_US: same as EN_UK
-    overlay_en_us[0x4B] = 99;
-    overlay_en_us[0x4E] = 100;
-
-    // FR_FR: same PageUp/Down + any FR-specific tweaks you want
-    overlay_fr_fr[0x4B] = 99;
-    overlay_fr_fr[0x4E] = 100;
-
-    // NOTE:
-    // - FR_FR specific '-' mapping stays in st_key_lookup_hid_fr_fr.cpp (0x2D -> 53) because it's layout-specific.
-    // - Global overlay never sets 0x2D: we keep '-' layout-dependent.
-  }
-} _overlay_init_;
 

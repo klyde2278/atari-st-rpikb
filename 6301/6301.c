@@ -86,8 +86,7 @@ int crashed = 0;
 #include "cpu.c"
 #include "fprinthe.c"
 #include "memsetl.c"
-#include "symtab.c"  
-//#include "tty.c"
+#include "symtab.c"
 // arch
 // m68xx
 #include "memory.c"
@@ -157,6 +156,15 @@ void hd6301_run_clocks(COUNTER_VAR clocks) {
     pending_reset = 0;
     hd6301_reset(1);  // Cold reset
     return;  // Don't run cycles this iteration
+  }
+
+  // Self-recover if the emulated CPU crashed (PC outside ROM/RAM, see
+  // instr_exec): a cold reset restores a working keyboard instead of
+  // leaving it dead until power-cycle.
+  if (crashed) {
+    TRACE("6301: crashed, auto-resetting\n");
+    hd6301_reset(1);
+    return;
   }
 
   // make sure our 6301 is running OK

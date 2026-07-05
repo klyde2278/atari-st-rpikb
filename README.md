@@ -119,7 +119,7 @@ The real ST keyboard has a single DB-9 socket which is shared between the mouse 
 
 6. Keyboard mapping page. The USB keyboard can be remapped to match the Atari ST keys
 
-   
+   <img src="mapping1_EN.png" alt="Key mapping" style="width: 300px; height: auto;">
 
 ## Keyboard Shortcuts
 

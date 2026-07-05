@@ -117,7 +117,7 @@ The real ST keyboard has a single DB-9 socket which is shared between the mouse 
 
    <img src="deadzone_EN.png" alt="Dead zone" style="width: 300px; height: auto;">
 
-6. Joystick autofire settings page. An autofire can be set for Atari & USB joysticks.
+6. Joystick autofire settings page. An autofire can be set for both Atari & USB joysticks.
 
    <img src="autofire.png" alt="Dead zone" style="width: 300px; height: auto;">
 

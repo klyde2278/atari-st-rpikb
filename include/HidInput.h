@@ -76,6 +76,33 @@ public:
      */
     static const char* get_layout_name(unsigned ui_index);
 
+    /**
+     * Return a pointer to the raw HID->ST scancode table for the given layout index.
+     * Returns the EN-US fallback for out-of-range indices.
+     * Used by UserInterface to initialise or reset key_remap[].
+     */
+    static const uint8_t* get_layout_table(unsigned ui_index);
+
+    // --- Key remap ---
+
+    /** Set the active HID->ST scancode remap table (pointer to Settings::key_remap[]).
+     *  Pass nullptr to fall back to the standard layout lookup. */
+    void set_remap_table(const uint8_t* tbl);
+
+    /** Enable / disable USB key capture mode.
+     *  While active, handle_keyboard() captures the pressed HID keycode into
+     *  captured_hid_keycode and updates last_key_label, but does NOT update
+     *  key_states[] (preventing spurious Atari keypresses during remap UI). */
+    void set_capture_mode(bool active);
+
+    /** Return the last HID keycode captured while in capture mode.
+     *  Returns 0 when no key is pressed or capture mode is off. */
+    uint8_t get_captured_hid_keycode() const;
+
+    /** Return a short display label for a USB HID keycode (QWERTY convention).
+     *  Thread-safe from main loop context only (static internal buffer). */
+    static const char* get_hid_label(uint8_t hk);
+
     // --- Device handling ---
 
     /** Open input devices (no-op on RP2040 — USB callbacks handle enumeration). */
@@ -139,6 +166,10 @@ private:
     // read by UserInterface::update_mouse_debug() via get_last_key_label().
     char last_key_label[8] = {};
 
+    // --- Remap / capture state ---
+    bool    capture_mode_active  = false;  // true = suppress key_states updates
+    uint8_t captured_hid_keycode = 0;      // last non-zero HID code seen in capture mode
+
     // --- Autofire runtime state (not persisted) ---
     // autofire_active: true = autofire currently pulsing
     bool            autofire_active[2]        = {};
@@ -176,9 +207,6 @@ unsigned char st_joystick();
 
 /** Return 1 if the mouse is enabled, 0 if the joystick is active on Joy0. */
 int st_mouse_enabled();
-
-/** Update joystick state on-demand (called from the HD6301 emulator). */
-void update_joystick_state();
 
 #ifdef __cplusplus
 }

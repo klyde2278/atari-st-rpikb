@@ -53,6 +53,12 @@ struct Settings {
 	// Autofire rate per joystick: 1..AUTOFIRE_MAX Hz
 	uint8_t autofire_rate_joy0;
 	uint8_t autofire_rate_joy1;
+
+	// USB HID -> Atari ST scancode remap table.
+	// Indexed by HID keycode (0-127). Value = ST scancode to produce.
+	// Initialised from the active layout table on first boot after firmware update.
+	// Reset to the active layout when the user changes layout or selects "Clear all".
+	uint8_t key_remap[128];
 };
 
 class NVSettings {

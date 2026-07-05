@@ -26,22 +26,7 @@ extern "C" {
 
 #define ST_KEY_LOOKUP_SIZE 128
 
-  extern const uint8_t st_key_lookup_hid_cz_cz[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_de_ch[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_de_de[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_dk_dk[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_en_uk[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_en_us[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_es_es[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_fi_fi[ST_KEY_LOOKUP_SIZE]; 
-  extern const uint8_t st_key_lookup_hid_fr_ch[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_fr_fr[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_hu_hu[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_it_it[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_nl_nl[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_no_no[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_pl_pl[ST_KEY_LOOKUP_SIZE];
-  extern const uint8_t st_key_lookup_hid_se_se[ST_KEY_LOOKUP_SIZE];
+  extern const uint8_t st_key_lookup_hid[ST_KEY_LOOKUP_SIZE];
 
 #ifdef __cplusplus
 }

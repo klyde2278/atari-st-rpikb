@@ -43,6 +43,12 @@ enum TranslationKey {
 	KEY_SETTINGS,           // "Settings"
 	KEY_DEBUG,              // "Debug"
 	KEY_AUTOFIRE,           // "Autofire"
+    KEY_REMAP,              // "Remapping" — menu entry for key remap feature
+    KEY_REMAP_CLEAR,        // "Clear all"  — reset remap to default layout
+	KEY_QUIT_REMAPPING,     // "Quit remapping?"
+	KEY_OK_CONFIRM,         // "OK to confirm exit"
+	KEY_LR_CANCEL,          // "LEFT or RIGHT to cancel"
+	KEY_CLEAR_CONFIRM,      // "Clear all mappings?"
     KEY_COUNT // Number of strings. Keep last to count.
 };
 

@@ -20,6 +20,7 @@
 
 #include "ssd1306.h"
 #include "NVSettings.h"
+#include "pico/util/queue.h"
 #include <string>
 #include <deque>
 
@@ -43,15 +44,18 @@
 #define UI_CURSOR_GLYPH  ((char)0x88)
 
 // Number of entries in each menu (must stay in sync with the string arrays
-// defined in update_menu1 / update_menu2).
-#define MENU1_COUNT  5   // Back | Autofire | Settings   | Help    | Debug
-#define MENU2_COUNT  4   // Back | Language | Kbd Layout | Deadzone
+// defined in update_menu1 / update_menu2 / update_remap_group).
+#define MENU1_COUNT         5   // Back | Autofire | Settings | Help | Debug
+#define MENU2_COUNT         5   // Back | Language | Kbd Layout | Deadzone | Remapping
+#define REMAP_GROUP_COUNT   6   // Back | 1-9 | A-Z | Spec. | Pad | Clear all
 
 // Vertical spacing (pixels) between menu entries.
-// MENU1 has 4 entries: 4 x 14 = 56 px < 64 px display height.
-// MENU2 has 5 entries: 5 x 12 = 60 px < 64 px.
-#define MENU1_LINE_H 12
-#define MENU2_LINE_H 14
+// MENU1: 5 x 12 = 60 px < 64 px display height.
+// MENU2: 5 x 12 = 60 px < 64 px.
+// REMAP_GROUP: 6 x 10 = 60 px < 64 px.
+#define MENU1_LINE_H        12
+#define MENU2_LINE_H        12
+#define REMAP_GROUP_LINE_H  10
 
 class UserInterface {
 public:
@@ -86,6 +90,10 @@ public:
         PAGE_MOUSE_DEBUG,
         PAGE_SERIAL,
         PAGE_USB_DEBUG,
+
+        // Key remap pages (reached from PAGE_MENU_2)
+        PAGE_REMAP_GROUP,   // group selection menu
+        PAGE_REMAP_LIST,    // individual key remap within a group
 
         PAGE_MAX
     };
@@ -152,6 +160,9 @@ public:
 
     /**
      * Log a serial byte to the serial debug page.
+     * Multicore-safe: may be called from core 1 (HD6301 TX path) as well as
+     * core 0 (UART RX path). Only pushes the raw event into a queue; all
+     * formatting and heap allocation happen on core 0 in drain_serial_log().
      */
     void serial(bool send, uint8_t data);
 
@@ -185,6 +196,9 @@ public:
      */
     void show_usb_debug_page();
 
+    void update_remap_group();
+    void update_remap_list();
+
     /**
      * Accumulate mouse delta for the mouse debug page.
      * Called from handle_mouse() on every HID poll cycle.
@@ -194,6 +208,16 @@ public:
     void set_mouse_debug_delta(int dx, int dy);
 
 private:
+    // Mark the NV settings as modified without writing them to flash yet.
+    // A flash write erases and reprograms a 4 KB sector (~50 ms, interrupts
+    // off, core 1 parked); doing it on every button auto-repeat step would
+    // freeze the UI/USB ~12x per second and wear the flash. update() performs
+    // the actual settings.write() once, after the last change has settled.
+    void schedule_settings_write();
+    void commit_pending_remap();
+    // Pop pending serial log events from serial_log_q and format them into
+    // serial_lines. Core 0 only — called from update().
+    void drain_serial_log();
     void update_serial();
     void update_status();
     void update_mouse();
@@ -213,11 +237,18 @@ private:
 private:
     PAGE        page = PAGE_SPLASH;
     NVSettings  settings;
+    // Deferred settings write state (see schedule_settings_write()).
+    bool            settings_dirty = false;
+    absolute_time_t settings_dirty_tm;
     bool        dirty = true;
     int         num_kb = 0;
     int         num_mouse = 0;
     int         num_joy = 0;
     std::deque<std::string> serial_lines;
+    // Cross-core serial log events: bit 8 = send flag, bits 0-7 = data byte.
+    // Producers: core 0 (RX) and core 1 (TX). Consumer: core 0 (update()).
+    // pico queue_t is spinlock-protected and safe for multicore use.
+    queue_t     serial_log_q;
     absolute_time_t serial_tm;
     uint        btn_gpio[3];
     int         btn_count[3];
@@ -233,8 +264,34 @@ private:
     // Currently selected item on PAGE_AUTOFIRE (0=J1 mode,1=J1 rate,2=J0 mode,3=J0 rate)
     int         autofire_selected = 0;
 
+    // Currently highlighted entry on PAGE_REMAP_GROUP (0=Back..5=Clear all)
+    int         remap_group_selected = 0;
+    // Current entry index within the active group on PAGE_REMAP_LIST
+    int         remap_list_index = 0;
+    // Pointer and size of the active group's ST scancode array
+    const uint8_t* remap_group_ptr  = nullptr;
+    int            remap_group_size = 0;
+
     // Mouse movement delta accumulated between two render frames (PAGE_MOUSE_DEBUG).
     // Set by set_mouse_debug_delta(), cleared after each call to update_mouse_debug().
     int         mouse_debug_dx = 0;
     int         mouse_debug_dy = 0;
+
+    // Last captured HID keycode seen on PAGE_REMAP_LIST.
+    // Used to detect USB key changes without forcing a redraw every loop cycle.
+    // 0xFF = no previous value (sentinel).
+    uint8_t     last_captured_hid = 0xFF;
+
+    // Pending remap HID: latches the last non-zero captured keycode so it stays
+    // displayed after the key is released, until navigation or confirmation resets it.
+    uint8_t     pending_remap_hid = 0;
+
+    // When true, update_remap_list() shows the "OK again to quit / L-R to cancel" overlay.
+    // Set by a second MIDDLE press with nothing pending; cleared on confirm or cancel.
+    bool        remap_exit_confirm = false;
+
+    // When true, update_remap_group() shows a "OK to confirm / L-R to cancel" overlay
+    // for the "Clear all" entry. Set by a first MIDDLE press on that entry; a second
+    // MIDDLE press performs the reset, LEFT/RIGHT cancels.
+    bool        remap_clear_confirm = false;
 };

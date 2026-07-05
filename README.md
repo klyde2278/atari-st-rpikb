@@ -93,7 +93,7 @@ If you don't know how or can't build the firmware by yourself, please find the r
 ## Using the emulator
 If you build the emulator as per the schematic or buy an Atari Eiffel Pico USB device from me, the Pico is powered directly from the Atari 5V supply. The Pico boots immediately but USB enumeration can take a few seconds. Once this is complete, the emulator is fully operational.
 
-The user interface has several pages that are rotated between by pressing the middle UI button. AS for Version V8.0.0 the pages in order are:
+The user interface has several pages that are rotated between by pressing the middle UI button. Since V11.0.0 the emulator features:
 
 1. Splash screen. Shows the version number
 
@@ -117,7 +117,11 @@ The real ST keyboard has a single DB-9 socket which is shared between the mouse 
 
    <img src="deadzone.png" alt="Dead zone" style="width: 300px; height: auto;">
 
-6. Keyboard mapping page. The USB keyboard can be remapped to match the Atari ST keys
+6. Joystick autofire settings page. An autofire can be set for Atari & USB joysticks.
+
+   
+
+7. Keyboard mapping page. The USB keyboard can be remapped to match the Atari ST keys
 
    <img src="mapping1_EN.png" alt="Key mapping" style="width: 300px; height: auto;">
 

@@ -39,6 +39,11 @@
 #define AUTOFIRE_MAX     15
 #define AUTOFIRE_DEFAULT  8
 
+// Screen brightness: 8 steps (0..7) mapped to SSD1306 contrast 0..255.
+#define BRIGHT_MIN        0
+#define BRIGHT_MAX        7
+#define BRIGHT_DEFAULT    7
+
 // Custom cursor glyph redefined in the font at address 0x88.
 // Used in front of the currently selected item on any menu or list page.
 #define UI_CURSOR_GLYPH  ((char)0x88)
@@ -46,15 +51,15 @@
 // Number of entries in each menu (must stay in sync with the string arrays
 // defined in update_menu1 / update_menu2 / update_remap_group).
 #define MENU1_COUNT         5   // Back | Autofire | Settings | Help | Debug
-#define MENU2_COUNT         5   // Back | Language | Kbd Layout | Deadzone | Remapping
+#define MENU2_COUNT         6   // Back | Language | Kbd Layout | Deadzone | Remapping | Screen
 #define REMAP_GROUP_COUNT   6   // Back | 1-9 | A-Z | Spec. | Pad | Clear all
 
 // Vertical spacing (pixels) between menu entries.
 // MENU1: 5 x 12 = 60 px < 64 px display height.
-// MENU2: 5 x 12 = 60 px < 64 px.
+// MENU2: 6 x 10 = 60 px < 64 px.
 // REMAP_GROUP: 6 x 10 = 60 px < 64 px.
 #define MENU1_LINE_H        12
-#define MENU2_LINE_H        12
+#define MENU2_LINE_H        10
 #define REMAP_GROUP_LINE_H  10
 
 class UserInterface {
@@ -78,6 +83,7 @@ public:
         PAGE_LANGUAGE,
         PAGE_LAYOUT,
         PAGE_DEADZONE,
+        PAGE_SCREEN,
 
         // Autofire settings page (reached from PAGE_MENU_1)
         PAGE_AUTOFIRE,
@@ -222,6 +228,8 @@ private:
     void update_status();
     void update_mouse();
     void update_deadzone();
+    // Render PAGE_SCREEN (sleep timeout + brightness settings)
+    void update_screen();
     void update_mouse_debug();
     // index = 0 or 1 ; selected = currently highlighted joystick on PAGE_JOY
     void update_joy(int index, int selected);
@@ -263,6 +271,15 @@ private:
     int         menu2_selected = 0;
     // Currently selected item on PAGE_AUTOFIRE (0=J1 mode,1=J1 rate,2=J0 mode,3=J0 rate)
     int         autofire_selected = 0;
+
+    // Currently selected item on PAGE_SCREEN (0 = sleep timeout, 1 = brightness)
+    int         screen_selected = 0;
+
+    // Screen sleep state: time of the last button press, and whether the
+    // panel is currently powered off. Any button press wakes the screen;
+    // the waking press is consumed (no navigation while blind).
+    absolute_time_t last_activity_tm;
+    bool        screen_asleep = false;
 
     // Currently highlighted entry on PAGE_REMAP_GROUP (0=Back..5=Clear all)
     int         remap_group_selected = 0;

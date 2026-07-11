@@ -59,6 +59,12 @@ struct Settings {
 	// Initialised from the active layout table on first boot after firmware update.
 	// Reset to the active layout when the user changes layout or selects "Clear all".
 	uint8_t key_remap[128];
+
+	// Screen sleep preset index (into kSleepPresets in UserInterface.cpp). 0 = never.
+	uint8_t screen_sleep_idx;
+
+	// Screen brightness step 0..BRIGHT_MAX (mapped to SSD1306 contrast 0..255).
+	uint8_t screen_brightness;
 };
 
 class NVSettings {

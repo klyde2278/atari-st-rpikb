@@ -49,6 +49,9 @@ enum TranslationKey {
 	KEY_OK_CONFIRM,         // "OK to confirm exit"
 	KEY_LR_CANCEL,          // "LEFT or RIGHT to cancel"
 	KEY_CLEAR_CONFIRM,      // "Clear all mappings?"
+    KEY_SCREEN,             // "Screen" — menu entry for screen settings page
+    KEY_SLEEP,              // "Sleep" — screen sleep timeout label
+    KEY_BRIGHTNESS,         // "Brightness"
     KEY_COUNT // Number of strings. Keep last to count.
 };
 

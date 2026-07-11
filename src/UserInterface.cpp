@@ -110,6 +110,18 @@ static const char* kLayouts[] = {
 };
 static const int NUM_LAYOUTS = sizeof(kLayouts) / sizeof(kLayouts[0]);
 
+// ---------------------------------------------------------------------------
+// Screen sleep timeout presets (seconds). 0 = sleep disabled ("OFF").
+// LEFT/RIGHT on PAGE_SCREEN cycle through this table, wrapping at both ends.
+// ---------------------------------------------------------------------------
+static const uint16_t kSleepPresets[] = { 0, 5, 10, 15, 20, 30, 60, 120, 300 };
+static const int SLEEP_PRESET_COUNT = sizeof(kSleepPresets) / sizeof(kSleepPresets[0]);
+
+// Map a brightness step (0..BRIGHT_MAX) to an SSD1306 contrast value (0..255).
+static inline uint8_t brightness_to_contrast(uint8_t step) {
+    return (uint8_t)(((int)step * 255) / BRIGHT_MAX);
+}
+
 enum BUTTONS {
     BUTTON_LEFT,
     BUTTON_MIDDLE,
@@ -184,6 +196,14 @@ void UserInterface::init() {
         joystick_dead_zone = JOY_DZ_MAX;
         settings.get_settings().joystick_dead_zone = joystick_dead_zone;
     }
+
+    // Restore screen settings from NV storage; clamp out-of-range values
+    // (0xFF after a flash migration) to safe defaults, then apply brightness.
+    if (st.screen_sleep_idx >= SLEEP_PRESET_COUNT) st.screen_sleep_idx = 0; // OFF
+    if (st.screen_brightness > BRIGHT_MAX) st.screen_brightness = BRIGHT_DEFAULT;
+    ssd1306_contrast(&disp, brightness_to_contrast(st.screen_brightness));
+
+    last_activity_tm = get_absolute_time();
 
     serial_tm  = get_absolute_time();
     splash_tm  = get_absolute_time();
@@ -358,7 +378,7 @@ void UserInterface::update_menu1() {
 // ---------------------------------------------------------------------------
 // update_menu2
 // Renders PAGE_MENU_2 (settings sub-menu).
-// Entries: Back | Language | Kbd Layout | Deadzone | Autofire
+// Entries: Back | Language | Kbd Layout | Deadzone | Remapping | Screen
 // The UI_CURSOR_GLYPH marks the currently selected entry (menu2_selected).
 // Left / Right buttons cycle through entries; Middle button activates.
 // ---------------------------------------------------------------------------
@@ -368,7 +388,8 @@ void UserInterface::update_menu2() {
         get_translation(KEY_LANGUAGE, lang_idx),
         get_translation(KEY_LAYOUT, lang_idx),
         get_translation(KEY_DEAD_ZONE, lang_idx),
-        get_translation(KEY_REMAP, lang_idx)
+        get_translation(KEY_REMAP, lang_idx),
+        get_translation(KEY_SCREEN, lang_idx)
     };
     ssd1306_clear(&disp);
     for (int i = 0; i < MENU2_COUNT; ++i) {
@@ -469,6 +490,49 @@ void UserInterface::update_help_2() {
     ssd1306_draw_utf8_string(&disp, 0, 30, 1, get_translation(KEY_HELP_SET_270, lang_idx));
     ssd1306_draw_string     (&disp, 0, 40, 1, (char*)"Alt + NumPad '-':");
     ssd1306_draw_utf8_string(&disp, 0, 50, 1, get_translation(KEY_HELP_SET_150, lang_idx));
+}
+
+// ---------------------------------------------------------------------------
+// update_screen
+// PAGE_SCREEN layout (128 x 64 px, scale 1):
+//   y= 0  Title "Screen" (inverse)
+//   y=16  [cur] Sleep timeout ("OFF" or seconds)
+//   y=36  [cur] Brightness label
+//   y=48        Brightness slider (8 steps)
+//
+// screen_selected: 0 = sleep timeout, 1 = brightness
+// MIDDLE advances cursor; on last item exits to PAGE_MENU_2.
+// LEFT/RIGHT: cycle sleep presets (wraps), or decrease/increase brightness.
+// ---------------------------------------------------------------------------
+void UserInterface::update_screen() {
+    char buf[32];
+
+    ssd1306_draw_utf8_string_inverse(&disp, 0, 0, 1, get_translation(KEY_SCREEN, lang_idx));
+
+    auto& st = settings.get_settings();
+
+    // --- Sleep timeout line ---
+    char cur[2] = { (screen_selected == 0) ? UI_CURSOR_GLYPH : ' ', 0 };
+    ssd1306_draw_string(&disp, 0, 16, 1, cur);
+    uint16_t secs = kSleepPresets[st.screen_sleep_idx];
+    if (secs == 0) {
+        sprintf(buf, "%s: OFF", get_translation(KEY_SLEEP, lang_idx));
+    } else {
+        sprintf(buf, "%s: %us", get_translation(KEY_SLEEP, lang_idx), (unsigned)secs);
+    }
+    ssd1306_draw_utf8_string(&disp, 10, 16, 1, buf);
+
+    // --- Brightness line + slider ---
+    cur[0] = (screen_selected == 1) ? UI_CURSOR_GLYPH : ' ';
+    ssd1306_draw_string(&disp, 0, 36, 1, cur);
+    ssd1306_draw_utf8_string(&disp, 10, 36, 1, get_translation(KEY_BRIGHTNESS, lang_idx));
+
+    sprintf(buf, "\x80======\x82"); // 0x80=left-end, 0x82=right-end, 0x81=cursor
+    int cursor = st.screen_brightness;
+    if (cursor < BRIGHT_MIN) cursor = BRIGHT_MIN;
+    if (cursor > BRIGHT_MAX) cursor = BRIGHT_MAX;
+    buf[cursor] = (char)0x81;
+    ssd1306_draw_string(&disp, 10, 48, 1, buf);
 }
 
 void UserInterface::update_deadzone() {
@@ -824,7 +888,9 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //           ──(mid, Language)──► LANGUAGE
 //           ──(mid, Kbd Layout)──► LAYOUT
 //           ──(mid, Deadzone)──► DEADZONE
+//           ──(mid, Screen)──► SCREEN
 //   LANGUAGE, LAYOUT, DEADZONE ──(mid)──► MENU_2
+//   SCREEN  ──(mid)── cycle items; on last item ──► MENU_2
 //   MENU_2  ──(mid, Remapping)──► REMAP_GROUP
 //   REMAP_GROUP ──(mid, Back)──► MENU_2
 //           ──(mid, group)──► REMAP_LIST (capture mode ON)
@@ -841,6 +907,17 @@ void UserInterface::toggle_joystick_source(uint8_t joystick_num) {
 //   USB_DEBUG ──(mid)──► MENU_1
 // ---------------------------------------------------------------------------
 void UserInterface::on_button_down(int i) {
+
+    // While the screen is asleep, any button only wakes it up: the waking
+    // press is consumed so the user never navigates or edits blind.
+    if (screen_asleep) {
+        screen_asleep = false;
+        ssd1306_poweron(&disp);
+        last_activity_tm = get_absolute_time();
+        dirty = true;
+        return;
+    }
+    last_activity_tm = get_absolute_time();
 
     if (i == BUTTON_MIDDLE) {
         switch (page) {
@@ -894,6 +971,10 @@ void UserInterface::on_button_down(int i) {
                         remap_group_selected = 0;
                         page = PAGE_REMAP_GROUP;
                         break;
+                    case 5:                                // Screen settings
+                        screen_selected = 0;
+                        page = PAGE_SCREEN;
+                        break;
                 }
                 dirty = true;
                 break;
@@ -910,6 +991,17 @@ void UserInterface::on_button_down(int i) {
 
             case PAGE_DEADZONE:
                 page  = PAGE_MENU_2;
+                dirty = true;
+                break;
+
+            case PAGE_SCREEN:
+                // MIDDLE advances the cursor through items; on the last item exits.
+                if (screen_selected == 0) {
+                    screen_selected = 1;
+                } else {
+                    screen_selected = 0;
+                    page = PAGE_MENU_2;
+                }
                 dirty = true;
                 break;
 
@@ -1148,6 +1240,24 @@ void UserInterface::on_button_down(int i) {
                 }
                 break;
 
+            case PAGE_SCREEN: {
+                auto& st = settings.get_settings();
+                if (screen_selected == 0) {
+                    // Sleep timeout: cycle presets backwards, wrap OFF <- 300s.
+                    st.screen_sleep_idx =
+                        (st.screen_sleep_idx + SLEEP_PRESET_COUNT - 1) % SLEEP_PRESET_COUNT;
+                    schedule_settings_write();
+                    dirty = true;
+                } else if (st.screen_brightness > BRIGHT_MIN) {
+                    // Brightness: LEFT = decrease, applied live.
+                    --st.screen_brightness;
+                    ssd1306_contrast(&disp, brightness_to_contrast(st.screen_brightness));
+                    schedule_settings_write();
+                    dirty = true;
+                }
+                break;
+            }
+
             default:
                 break;
         }
@@ -1271,6 +1381,24 @@ void UserInterface::on_button_down(int i) {
                 }
                 break;
 
+            case PAGE_SCREEN: {
+                auto& st = settings.get_settings();
+                if (screen_selected == 0) {
+                    // Sleep timeout: cycle presets forwards, wrap 300s -> OFF.
+                    st.screen_sleep_idx =
+                        (st.screen_sleep_idx + 1) % SLEEP_PRESET_COUNT;
+                    schedule_settings_write();
+                    dirty = true;
+                } else if (st.screen_brightness < BRIGHT_MAX) {
+                    // Brightness: RIGHT = increase, applied live.
+                    ++st.screen_brightness;
+                    ssd1306_contrast(&disp, brightness_to_contrast(st.screen_brightness));
+                    schedule_settings_write();
+                    dirty = true;
+                }
+                break;
+            }
+
             default:
                 break;
         }
@@ -1309,6 +1437,21 @@ void UserInterface::update() {
         settings_dirty = false;
         settings.write();
     }
+
+    // Screen sleep: power the panel off after the configured inactivity
+    // timeout (button presses only). Never sleeps on the splash screen.
+    // While asleep, skip all rendering to save I2C bandwidth; wake-up is
+    // handled at the top of on_button_down().
+    if (!screen_asleep) {
+        uint16_t sleep_s = kSleepPresets[settings.get_settings().screen_sleep_idx];
+        if (sleep_s > 0 && page != PAGE_SPLASH &&
+            absolute_time_diff_us(last_activity_tm, get_absolute_time()) >=
+                (int64_t)sleep_s * 1000000) {
+            screen_asleep = true;
+            ssd1306_poweroff(&disp);
+        }
+    }
+    if (screen_asleep) return;
 
     // Mouse and joystick are polled by the 10 ms main loop, not here: the
     // periodic timer only requests redraws (below) for the live debug pages.
@@ -1374,6 +1517,11 @@ void UserInterface::update() {
         case PAGE_DEADZONE:
             ssd1306_clear(&disp);
             update_deadzone();
+            break;
+
+        case PAGE_SCREEN:
+            ssd1306_clear(&disp);
+            update_screen();
             break;
 
         case PAGE_AUTOFIRE:

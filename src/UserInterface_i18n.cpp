@@ -12,27 +12,32 @@ static const char* translations[][KEY_COUNT] = {
     { "USB Keyboard  ", "USB Mouse     ", "USB Joystick  ", "USB Mouse enabled", "Joy 0 enabled", "Mouse speed",       "Language          ", "Keyboard Layout   ",
 	  "Help", "USB<->Atari mouse", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
 	  "Set CPU 270 MHz", "Set CPU 150 MHz", "Joy dead zone     ", "Back", "Settings", "Debug", "Autofire          ",
-	  "Key mapping", "Clear all", "Exit?", "OK: Yes", "LEFT / RIGHT: No", "Clear all mappings?"},
+	  "Key mapping", "Clear all", "Exit?", "OK: Yes", "LEFT / RIGHT: No", "Clear all mappings?",
+	  "Screen", "Sleep", "Brightness"},
     // FR
     { "Clavier USB   ", "Souris USB    ", "Joystick USB  ", "Souris USB activée", "Joy 0 activé", "Vitesse souris",    "Langue            ", "Langue clavier    ",
 	  "Aide", "Souris USB<->Atari", "Réinitialiser", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
 	  "Activer 270 MHz", "Activer 150 MHz", "Zone morte joy.   ", "Retour", "Paramètres", "Debogage", "Autofire          ",
-	  "Mappage clavier", "Effacer tout", "Quitter ?", "OK : Oui", "G / D : Non", "Tout effacer ?"},
+	  "Mappage clavier", "Effacer tout", "Quitter ?", "OK : Oui", "G / D : Non", "Tout effacer ?",
+	  "Réglage écran", "Veille", "Luminosité"},
     // DE
     { "USB-Tastatur  ", "USB-Maus      ", "USB-Joystick  ", "USB-Maus aktiviert", "Joy 0 aktivert", "Maus-geschw.",    "Sprache           ", "Tastaturlayout    ",
 	  "Hilfe", "Maus USB<->Atari", "Zurücksetzen", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
 	  "CPU 270 MHz", "CPU 150 MHz", "Joystick-Totzone  ", "Zurück", "Einstellungen", "Debuggen", "Autofire          ",
-	  "Tastenbelegung", "Alles löschen", "Ausgang?", "OK: Ja", "LINKS/RECHTS: Nein", "Alles löschen?"},
+	  "Tastenbelegung", "Alles löschen", "Ausgang?", "OK: Ja", "LINKS/RECHTS: Nein", "Alles löschen?",
+	  "Bildschirm", "Standby", "Helligkeit"},
     // SP
     { "Teclado USB   ", "Ratón USB     ", "Joystick USB  ", "Ratón USB activado", "Joy 0 activado", "Velocidad Ratón", "Idioma            ", "Idioma teclado    ",
 	  "Ayuda", "Ratón USB<->Atari", "Reiniciar", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
 	  "Habilitar 270 MHz", "Habilitar 150 MHz", "Zona muerta joy.  ", "Volver", "Ajustes", "Depuración", "Autofire          ",
-	  "Reasign. teclas", "Borrar todo", "¿Salir?", "Aceptar : Sí", "I / D : No", "¿Borrar todo?"},
+	  "Reasign. teclas", "Borrar todo", "¿Salir?", "Aceptar : Sí", "I / D : No", "¿Borrar todo?",
+	  "Pantalla", "Reposo", "Brillo"},
     // IT
     { "Tastiera USB  ", "Mouse USB     ", "Joystick USB  ", "Mouse USB attivato", "Joy 0 attivato", "Velocità mouse",  "Lingua            ", "Layout tastiera   ",
 	  "Aiuto", "Mouse USB<->Atari", "Reset", "Joy1 D-sub<->USB", "Joy0 D-sub<->USB",
 	  "Abilita 270 MHz", "Abilita 150 MHz", "Zona morta joy.   ", "Ritorno", "Impostazioni", "Debug", "Autofire          ",
-	  "Rimappatura", "Cancella tutto", "Uscita?", "OK: Sì", "S / D: No", "Cancellare tutto?"}
+	  "Rimappatura", "Cancella tutto", "Uscita?", "OK: Sì", "S / D: No", "Cancellare tutto?",
+	  "Schermo", "Standby", "Luminosità"}
 };
 
 const char* get_translation(TranslationKey key, int lang_idx) {

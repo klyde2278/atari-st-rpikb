@@ -67,6 +67,8 @@ void NVSettings::read() {
 		storage.settings.language_index = 0;        // Default language (EN)
 		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (CZ)
         storage.settings.joystick_dead_zone = 0x08; // Default 0x08
+        storage.settings.screen_sleep_idx = 0;      // Default: screen sleep OFF
+        storage.settings.screen_brightness = 7;     // Default: max brightness (BRIGHT_DEFAULT)
         write();
     }
     else {

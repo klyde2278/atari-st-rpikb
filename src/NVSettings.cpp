@@ -68,7 +68,11 @@ void NVSettings::read() {
 		storage.settings.keyboard_layout_index = 0; // Default keyboard layout (CZ)
         storage.settings.joystick_dead_zone = 0x08; // Default 0x08
         storage.settings.screen_sleep_idx = 0;      // Default: screen sleep OFF
-        storage.settings.screen_brightness = 7;     // Default: max brightness (BRIGHT_DEFAULT)
+        storage.settings.screen_brightness = 8;     // Default: max brightness (BRIGHT_DEFAULT)
+        storage.settings.autofire_mode_joy0 = 0;    // Default: autofire OFF
+        storage.settings.autofire_mode_joy1 = 0;
+        storage.settings.autofire_rate_joy0 = 8;    // Default: 8 Hz (AUTOFIRE_DEFAULT)
+        storage.settings.autofire_rate_joy1 = 8;
         write();
     }
     else {
@@ -107,6 +111,18 @@ void NVSettings::read() {
 			memset(storage.settings.key_remap, 0, sizeof(storage.settings.key_remap));
 			write();
 		}
+
+		// MIGRATION: screen settings. Valid brightness is 1..8: 0xFF means
+		// unprogrammed flash, 0 was written by an early dev build and would
+		// make the display look completely off (contrast 0).
+		bool scr_dirty = false;
+		if (storage.settings.screen_sleep_idx == 0xFF) {
+			storage.settings.screen_sleep_idx = 0; scr_dirty = true;  // sleep OFF
+		}
+		if (storage.settings.screen_brightness == 0 || storage.settings.screen_brightness > 8) {
+			storage.settings.screen_brightness = 8; scr_dirty = true; // max brightness
+		}
+		if (scr_dirty) write();
    }
 }
 
